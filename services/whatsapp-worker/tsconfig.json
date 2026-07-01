@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "outDir": "dist",
+    "rootDir": "src",
+    "paths": {
+      "@trk/shared": ["../../packages/shared/src/index.ts"],
+      "@trk/shared/trk": ["../../packages/shared/src/trk.ts"],
+      "@trk/shared/schemas": ["../../packages/shared/src/schemas.ts"]
+    }
+  },
+  "include": ["src/**/*"]
+}

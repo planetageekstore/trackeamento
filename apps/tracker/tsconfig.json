@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2019", "DOM"],
+    "target": "ES2019",
+    "moduleResolution": "Bundler",
+    "outDir": "dist",
+    "rootDir": "src",
+    "noEmit": true,
+    "paths": {
+      "@trk/shared": ["../../packages/shared/src/index.ts"],
+      "@trk/shared/trk": ["../../packages/shared/src/trk.ts"]
+    }
+  },
+  "include": ["src/**/*"]
+}

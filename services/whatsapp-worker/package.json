@@ -1,0 +1,27 @@
+{
+  "name": "whatsapp-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsup src/server.ts --format esm --clean",
+    "start": "node dist/server.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.4",
+    "@trk/shared": "workspace:*",
+    "bullmq": "^5.13.0",
+    "fastify": "^4.28.1",
+    "ioredis": "^5.4.1"
+  },
+  "devDependencies": {
+    "tsup": "^8.3.0",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.2",
+    "vitest": "^2.1.2"
+  }
+}

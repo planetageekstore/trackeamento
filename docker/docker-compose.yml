@@ -1,0 +1,54 @@
+# Componentes always-on (VPS/Docker) — decisão de Clarify Q5.
+# Evolution API mantém a sessão de WhatsApp por cliente; Redis é a fila do worker.
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+
+  evolution-api:
+    image: atendai/evolution-api:v2.1.1
+    restart: unless-stopped
+    depends_on:
+      - redis
+    environment:
+      - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY}
+      - DATABASE_ENABLED=true
+      - DATABASE_PROVIDER=postgresql
+      - DATABASE_CONNECTION_URI=${EVOLUTION_DB_URI}
+      - CACHE_REDIS_ENABLED=true
+      - CACHE_REDIS_URI=redis://redis:6379/1
+      - WEBHOOK_GLOBAL_ENABLED=true
+      - WEBHOOK_GLOBAL_URL=${WORKER_WEBHOOK_URL}
+    ports:
+      - "8081:8080"
+    volumes:
+      - evolution_instances:/evolution/instances
+
+  worker:
+    build:
+      context: ..
+      dockerfile: docker/worker.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - redis
+      - evolution-api
+    environment:
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - SECRETS_ENCRYPTION_KEY=${SECRETS_ENCRYPTION_KEY}
+      - REDIS_URL=redis://redis:6379
+      - EVOLUTION_API_URL=http://evolution-api:8080
+      - EVOLUTION_API_KEY=${EVOLUTION_API_KEY}
+      - WEBHOOK_SHARED_TOKEN=${WEBHOOK_SHARED_TOKEN}
+      - PORT=8080
+    ports:
+      - "8080:8080"
+
+volumes:
+  redis_data:
+  evolution_instances:

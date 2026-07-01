@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Loja de Teste — Trackeamento</title>
+    <style>
+      body { font-family: system-ui, sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; color: #111; }
+      .btn { display: inline-block; background: #25d366; color: #fff; padding: 12px 18px; border-radius: 8px; text-decoration: none; font-weight: 600; }
+      code { background: #f3f3f3; padding: 2px 6px; border-radius: 4px; }
+      .box { border: 1px solid #ddd; border-radius: 10px; padding: 16px; margin: 16px 0; }
+    </style>
+  </head>
+  <body>
+    <h1>Loja de Teste</h1>
+    <p>Esta página simula o site de um cliente com o tracker instalado.</p>
+
+    <div class="box">
+      <p>Clique no botão abaixo — o tracker vai anexar <code>[Ref: TRK-...]</code> na mensagem automaticamente:</p>
+      <a class="btn" href="https://wa.me/5511999999999?text=Ol%C3%A1%2C%20tenho%20interesse%20no%20produto">
+        Falar no WhatsApp
+      </a>
+    </div>
+
+    <div class="box">
+      <strong>Como verificar:</strong>
+      <ol>
+        <li>Abra o <b>DevTools</b> (F12) → <b>Application</b> → <b>Local Storage</b> → veja a chave <code>_saas_trk_id</code>.</li>
+        <li>Passe o mouse no botão do WhatsApp → o link já contém <code>[Ref: TRK-...]</code>.</li>
+        <li>No painel, abra <b>Leads</b> do Demo Tenant → o seu acesso aparece como um lead novo.</li>
+      </ol>
+    </div>
+
+    <!-- É ESTE o snippet que vai no site do cliente (com a site key dele) -->
+    <script async src="/t/v1/tracker.js" data-site-key="pk_live_demo"></script>
+  </body>
+</html>
