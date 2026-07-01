@@ -1,0 +1,161 @@
+import Link from "next/link";
+import { requireUser, assertTenantAccess } from "@/lib/auth";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { CopyBlock } from "@/components/CopyBlock";
+import { addDomain, removeDomain } from "./actions";
+
+export const dynamic = "force-dynamic";
+
+interface Domain {
+  id: string;
+  domain: string;
+}
+
+function StatusPill({ ok, text }: { ok: boolean; text: string }) {
+  return (
+    <span className={`text-sm ${ok ? "text-emerald-600" : "text-neutral-400"}`}>
+      {ok ? "● " : "○ "}
+      {text}
+    </span>
+  );
+}
+
+function ChannelRow({
+  title,
+  desc,
+  status,
+  href,
+}: {
+  title: string;
+  desc: string;
+  status: React.ReactNode;
+  href: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 border-b py-3 last:border-0">
+      <div>
+        <p className="font-medium">{title}</p>
+        <p className="text-sm text-neutral-500">{desc}</p>
+      </div>
+      <div className="flex items-center gap-3">
+        {status}
+        <Link href={href} className="rounded-lg border px-3 py-1.5 text-sm">
+          Conectar
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+export default async function TenantConfigPage({ params }: { params: Promise<{ tenant: string }> }) {
+  const { tenant } = await params;
+  await requireUser();
+  await assertTenantAccess(tenant);
+
+  const supabase = await createSupabaseServerClient();
+  const [{ data: t }, { data: domainRows }, { data: wa }, { data: integs }] = await Promise.all([
+    supabase.from("tenant").select("name, site_key").eq("id", tenant).maybeSingle(),
+    supabase.from("tenant_domain").select("id, domain").eq("tenant_id", tenant).order("domain"),
+    supabase.from("whatsapp_instance").select("status").eq("tenant_id", tenant).maybeSingle(),
+    supabase.from("integration").select("provider, status").eq("tenant_id", tenant),
+  ]);
+
+  const domains = (domainRows ?? []) as Domain[];
+  const integ = new Map((integs ?? []).map((i) => [i.provider, i.status]));
+  const cdn = process.env.CDN_URL ?? process.env.APP_URL ?? "";
+  const snippet = `<script async src="${cdn}/t/v1/tracker.js" data-site-key="${t?.site_key}"></script>`;
+
+  return (
+    <main className="mx-auto max-w-2xl space-y-8 p-8">
+      <div>
+        <Link href="/tenants" className="text-sm text-neutral-500 hover:underline">
+          ← Clientes
+        </Link>
+        <h1 className="mt-1 text-xl font-semibold">{t?.name}</h1>
+      </div>
+
+      {/* 1. Instalação */}
+      <section className="space-y-3 rounded-xl border bg-white p-5">
+        <h2 className="font-medium">1. Instalar o rastreador no site</h2>
+        <p className="text-sm text-neutral-600">
+          Cole este código no <code>&lt;head&gt;</code> do site do cliente. Se a loja for{" "}
+          <b>Nuvemshop</b>, você pode pular esta etapa e apenas conectar a loja abaixo — o rastreador
+          é injetado automaticamente.
+        </p>
+        <CopyBlock code={snippet} />
+      </section>
+
+      {/* 2. Domínios */}
+      <section className="space-y-3 rounded-xl border bg-white p-5">
+        <h2 className="font-medium">2. Domínios permitidos</h2>
+        <p className="text-sm text-neutral-600">
+          Só aceitamos dados vindos destes domínios (proteção contra uso indevido da chave).
+        </p>
+        <ul className="space-y-1">
+          {domains.map((d) => (
+            <li key={d.id} className="flex items-center justify-between rounded border px-3 py-1.5 text-sm">
+              <span className="font-mono">{d.domain}</span>
+              <form action={removeDomain}>
+                <input type="hidden" name="tenantId" value={tenant} />
+                <input type="hidden" name="domainId" value={d.id} />
+                <button className="text-neutral-400 hover:text-red-600">remover</button>
+              </form>
+            </li>
+          ))}
+          {domains.length === 0 && <li className="text-sm text-neutral-400">Nenhum domínio ainda.</li>}
+        </ul>
+        <form action={addDomain} className="flex gap-2">
+          <input type="hidden" name="tenantId" value={tenant} />
+          <input
+            name="domain"
+            placeholder="ex.: planetageekstore.com.br"
+            className="flex-1 rounded-lg border px-3 py-2 text-sm"
+          />
+          <button className="rounded-lg bg-neutral-900 px-3 py-2 text-sm text-white">Adicionar</button>
+        </form>
+      </section>
+
+      {/* 3. Canais e integrações */}
+      <section className="rounded-xl border bg-white p-5">
+        <h2 className="mb-2 font-medium">3. Canais e integrações</h2>
+        <ChannelRow
+          title="WhatsApp"
+          desc="Conecte por QR code para atribuir conversas."
+          status={<StatusPill ok={wa?.status === "open"} text={wa?.status === "open" ? "conectado" : "não conectado"} />}
+          href={`/${tenant}/whatsapp`}
+        />
+        <ChannelRow
+          title="Nuvemshop"
+          desc="Injeta o rastreador e captura vendas pagas."
+          status={<StatusPill ok={integ.get("nuvemshop") === "connected"} text={integ.has("nuvemshop") ? String(integ.get("nuvemshop")) : "não conectado"} />}
+          href={`/api/oauth/nuvemshop/start?tenant=${tenant}`}
+        />
+        <ChannelRow
+          title="Meta Ads"
+          desc="Importa custos e envia conversões (CAPI)."
+          status={<StatusPill ok={integ.get("meta") === "connected"} text={integ.has("meta") ? String(integ.get("meta")) : "não conectado"} />}
+          href={`/api/oauth/meta/start?tenant=${tenant}`}
+        />
+        <ChannelRow
+          title="Google Ads"
+          desc="Importa custos e envia conversões offline."
+          status={<StatusPill ok={integ.get("google") === "connected"} text={integ.has("google") ? String(integ.get("google")) : "não conectado"} />}
+          href={`/api/oauth/google/start?tenant=${tenant}`}
+        />
+      </section>
+
+      {/* 4. Relatórios */}
+      <section className="flex gap-3">
+        <Link href={`/${tenant}/leads`} className="flex-1 rounded-xl border bg-white p-4 text-center text-sm font-medium hover:bg-neutral-50">
+          Leads
+        </Link>
+        <Link href={`/${tenant}/conversions`} className="flex-1 rounded-xl border bg-white p-4 text-center text-sm font-medium hover:bg-neutral-50">
+          Conversões
+        </Link>
+        <Link href={`/${tenant}/campaigns`} className="flex-1 rounded-xl border bg-white p-4 text-center text-sm font-medium hover:bg-neutral-50">
+          Campanhas
+        </Link>
+      </section>
+    </main>
+  );
+}
