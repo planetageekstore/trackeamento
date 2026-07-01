@@ -19,23 +19,26 @@ export default function WhatsAppPage({ params }: { params: Promise<{ tenant: str
         body: JSON.stringify({ tenantId: tenant }),
       });
       if (!res.ok) throw new Error();
-      const { qr } = (await res.json()) as { qr: string | null };
-      setQr(qr);
+      const data = (await res.json()) as { qr: string | null; state: string };
+      setQr(data.qr);
+      if (data.state === "open") setStatus("open");
     } catch {
       setStatus("error");
     }
   }, [tenant]);
 
-  // Polling do estado enquanto conectando.
+  // Enquanto conectando, faz polling do estado e atualiza o QR (renova a cada ~20s).
   useEffect(() => {
     if (status !== "connecting") return;
     const id = setInterval(async () => {
       try {
         const res = await fetch(`/api/whatsapp/status?tenantId=${tenant}`);
-        const { state } = (await res.json()) as { state: string };
-        if (state === "open") {
+        const data = (await res.json()) as { qr: string | null; state: string };
+        if (data.state === "open") {
           setStatus("open");
           setQr(null);
+        } else if (data.qr) {
+          setQr(data.qr);
         }
       } catch {
         /* mantém tentando */
@@ -53,14 +56,16 @@ export default function WhatsAppPage({ params }: { params: Promise<{ tenant: str
       ) : (
         <>
           <p className="text-sm text-neutral-600">
-            Clique em conectar e escaneie o QR code com o WhatsApp do cliente
-            (Aparelhos conectados → Conectar um aparelho).
+            Clique em conectar e escaneie o QR code com o WhatsApp do cliente (Aparelhos conectados →
+            Conectar um aparelho).
           </p>
           <button onClick={connect} className="rounded bg-neutral-900 px-4 py-2 text-white">
             {status === "connecting" ? "Gerando QR..." : "Conectar / gerar QR"}
           </button>
-          {/* QR retornado como data-URI base64 pela Evolution; <img> simples é suficiente. */}
           {qr && <img src={qr} alt="QR code do WhatsApp" className="mx-auto h-64 w-64" />}
+          {status === "connecting" && !qr && (
+            <p className="text-sm text-neutral-500">Preparando o QR code...</p>
+          )}
           {status === "error" && <p className="text-sm text-red-600">Falha ao conectar. Tente de novo.</p>}
         </>
       )}

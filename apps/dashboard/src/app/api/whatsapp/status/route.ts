@@ -20,8 +20,7 @@ export async function GET(req: NextRequest): Promise<Response> {
   if (!(await canAccess(tenantId))) return Response.json({ error: "forbidden" }, { status: 403 });
 
   try {
-    const state = await whatsappStatus(tenantId);
-    return Response.json({ state });
+    return Response.json(await whatsappStatus(tenantId));
   } catch {
     return Response.json({ error: "worker_unavailable" }, { status: 502 });
   }

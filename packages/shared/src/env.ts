@@ -30,16 +30,12 @@ export const dashboardEnvSchema = z.object({
 });
 export type DashboardEnv = z.infer<typeof dashboardEnvSchema>;
 
-/** Serviço always-on (Evolution API + worker). */
+/** Serviço always-on (worker: WhatsApp via Baileys + envio de conversões). */
 export const workerEnvSchema = z.object({
   SUPABASE_URL: z.string().url(),
   SUPABASE_SERVICE_ROLE_KEY: nonEmpty,
   SECRETS_ENCRYPTION_KEY: nonEmpty,
-  REDIS_URL: nonEmpty.default("redis://localhost:6379"),
-  EVOLUTION_API_URL: z.string().url(),
-  EVOLUTION_API_KEY: nonEmpty,
-  WEBHOOK_SHARED_TOKEN: nonEmpty, // valida webhooks Evolution → worker e dashboard → worker
-  WORKER_PUBLIC_URL: z.string().url().default("http://worker:8080"), // URL alcançável pela Evolution
+  WORKER_SHARED_TOKEN: nonEmpty, // auth dashboard <-> worker
   PORT: z.coerce.number().default(8080),
   // Envio de conversões server-side (US5) — opcionais
   META_API_VERSION: z.string().default("v21.0"),

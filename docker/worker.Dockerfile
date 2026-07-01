@@ -1,17 +1,16 @@
-# Build do serviço always-on (whatsapp-worker) no monorepo pnpm.
-FROM node:20-alpine AS base
+# Worker always-on (WhatsApp via Baileys + envio de conversões).
+# Usado por Railway/Render/Fly ou docker run. Monorepo pnpm: instala tudo,
+# builda o @trk/shared e roda o worker com tsx.
+FROM node:20-slim
 RUN corepack enable
 WORKDIR /app
 
-# Instala dependências do workspace (shared + worker)
-COPY pnpm-workspace.yaml package.json pnpm-lock.yaml* ./
-COPY packages/shared/package.json packages/shared/package.json
-COPY services/whatsapp-worker/package.json services/whatsapp-worker/package.json
-RUN pnpm install --frozen-lockfile || pnpm install
-
-# Copia o código e builda
+# Copia o workspace inteiro (o worker importa @trk/shared)
 COPY . .
-RUN pnpm --filter @trk/shared build && pnpm --filter whatsapp-worker build
 
+RUN pnpm install --frozen-lockfile || pnpm install
+RUN pnpm --filter @trk/shared build
+
+ENV PORT=8080
 EXPOSE 8080
-CMD ["node", "services/whatsapp-worker/dist/server.js"]
+CMD ["pnpm", "--filter", "whatsapp-worker", "start"]

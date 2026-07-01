@@ -21,8 +21,7 @@ export async function POST(req: NextRequest): Promise<Response> {
   if (!(await canAccess(tenantId))) return Response.json({ error: "forbidden" }, { status: 403 });
 
   try {
-    const { qr } = await connectWhatsApp(tenantId);
-    return Response.json({ qr });
+    return Response.json(await connectWhatsApp(tenantId));
   } catch {
     return Response.json({ error: "worker_unavailable" }, { status: 502 });
   }
