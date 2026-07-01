@@ -1,5 +1,6 @@
 import { requireUser, assertTenantAccess } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { importCosts } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -49,7 +50,15 @@ export default async function CampaignsPage({ params }: { params: Promise<{ tena
 
   return (
     <main className="mx-auto max-w-4xl space-y-6 p-8">
-      <h1 className="text-xl font-semibold">Campanhas (últimos 30 dias)</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-semibold">Campanhas (últimos 30 dias)</h1>
+        <form action={importCosts}>
+          <input type="hidden" name="tenantId" value={tenant} />
+          <button className="rounded-lg border px-3 py-1.5 text-sm hover:bg-neutral-50">
+            Importar agora
+          </button>
+        </form>
+      </div>
 
       <div className="flex gap-6 text-sm">
         <div className="rounded-lg border bg-white p-4">
