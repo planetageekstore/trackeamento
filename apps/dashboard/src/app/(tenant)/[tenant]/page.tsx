@@ -134,7 +134,7 @@ export default async function TenantConfigPage({ params }: { params: Promise<{ t
           title="Meta Ads"
           desc="Importa custos e envia conversões (CAPI)."
           status={<StatusPill ok={integ.get("meta") === "connected"} text={integ.has("meta") ? String(integ.get("meta")) : "não conectado"} />}
-          href={`/api/oauth/meta/start?tenant=${tenant}`}
+          href={`/${tenant}/meta`}
         />
         <ChannelRow
           title="Google Ads"

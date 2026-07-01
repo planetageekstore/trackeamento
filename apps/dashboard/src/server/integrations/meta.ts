@@ -86,6 +86,44 @@ export async function connectMeta(tenantId: string, token: string): Promise<void
   );
 }
 
+/**
+ * Salva uma conexão Meta a partir de um token colado manualmente (ex.: token
+ * de System User do Business Manager, que não expira). Se ad account/pixel não
+ * forem informados, tenta descobrir automaticamente. Valida o token antes.
+ */
+export async function saveMetaToken(
+  tenantId: string,
+  token: string,
+  adAccountId?: string,
+  pixelId?: string,
+): Promise<{ ok: boolean; adAccountId: string | null; error?: string }> {
+  // Valida o token (e descobre conta/pixel se necessário).
+  const me = await fetch(`${GRAPH()}/me?access_token=${token}`);
+  if (!me.ok) return { ok: false, adAccountId: null, error: "token_invalido" };
+
+  let acc = adAccountId?.replace(/^act_/, "").trim() || null;
+  let pixel = pixelId?.trim() || null;
+  if (!acc) {
+    const discovered = await discoverMetaAccount(token);
+    acc = discovered.adAccountId;
+    pixel = pixel ?? discovered.pixelId;
+  }
+
+  const supabase = createSupabaseServiceClient();
+  await supabase.from("integration").upsert(
+    {
+      tenant_id: tenantId,
+      provider: "meta",
+      status: "connected",
+      account_ref: acc,
+      access_token_enc: await encryptSecret(token),
+      meta: { pixel_id: pixel, api_version: VER() },
+    },
+    { onConflict: "tenant_id,provider" },
+  );
+  return { ok: true, adAccountId: acc };
+}
+
 /** Importa custos das últimas N janelas diárias e faz upsert em campaign_cost. */
 export async function importMetaCosts(tenantId: string, days = 7): Promise<number> {
   const supabase = createSupabaseServiceClient();
