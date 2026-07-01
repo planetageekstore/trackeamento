@@ -44,10 +44,15 @@ export function mapMetaInsightsToCosts(rows: MetaInsightRow[], tenantId: string)
 }
 
 /** Troca o code do OAuth por um access token de longa duração. */
-export async function exchangeCodeMeta(code: string, redirectUri: string): Promise<string> {
+export async function exchangeCodeMeta(
+  code: string,
+  redirectUri: string,
+  clientId: string,
+  clientSecret: string,
+): Promise<string> {
   const params = new URLSearchParams({
-    client_id: process.env.META_APP_ID ?? "",
-    client_secret: process.env.META_APP_SECRET ?? "",
+    client_id: clientId,
+    client_secret: clientSecret,
     redirect_uri: redirectUri,
     code,
   });

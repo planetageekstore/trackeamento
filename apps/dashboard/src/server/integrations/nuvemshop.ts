@@ -1,6 +1,7 @@
 import "server-only";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { encryptSecret } from "@/server/crypto";
+import { getAppCredentials } from "@/server/appCredentials";
 
 const API_BASE = "https://api.tiendanube.com/v1";
 const TOKEN_URL = "https://www.tiendanube.com/apps/authorize/token";
@@ -13,13 +14,17 @@ interface TokenResponse {
 }
 
 /** Troca o `code` do OAuth por access_token + store id. */
-export async function exchangeCode(code: string): Promise<TokenResponse> {
+export async function exchangeCode(
+  code: string,
+  clientId: string,
+  clientSecret: string,
+): Promise<TokenResponse> {
   const res = await fetch(TOKEN_URL, {
     method: "POST",
     headers: { "content-type": "application/json", "user-agent": UA },
     body: JSON.stringify({
-      client_id: process.env.NUVEMSHOP_CLIENT_ID,
-      client_secret: process.env.NUVEMSHOP_CLIENT_SECRET,
+      client_id: clientId,
+      client_secret: clientSecret,
       grant_type: "authorization_code",
       code,
     }),
@@ -66,8 +71,16 @@ export async function registerOrderPaidWebhook(
  * Configurações → Códigos externos. Aqui cuidamos apenas do webhook (por API).
  */
 export async function connectNuvemshop(tenantId: string, code: string): Promise<void> {
-  const { access_token, user_id } = await exchangeCode(code);
   const supabase = createSupabaseServiceClient();
+  const { data: tenant } = await supabase
+    .from("tenant")
+    .select("agency_id")
+    .eq("id", tenantId)
+    .maybeSingle();
+  const { clientId, clientSecret } = await getAppCredentials(tenant!.agency_id, "nuvemshop");
+  if (!clientId || !clientSecret) throw new Error("Credenciais Nuvemshop não configuradas");
+
+  const { access_token, user_id } = await exchangeCode(code, clientId, clientSecret);
 
   await supabase.from("integration").upsert(
     {

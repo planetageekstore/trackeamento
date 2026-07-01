@@ -55,9 +55,16 @@ export default async function TenantsPage() {
 
   return (
     <main className="mx-auto max-w-3xl space-y-8 p-8">
-      <div>
-        <h1 className="text-xl font-semibold">Clientes</h1>
-        <p className="text-sm text-neutral-500">Cada cliente é uma loja/site que você rastreia.</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-xl font-semibold">Clientes</h1>
+          <p className="text-sm text-neutral-500">Cada cliente é uma loja/site que você rastreia.</p>
+        </div>
+        {scope.isAgencyAdmin && (
+          <Link href="/settings" className="rounded-lg border px-3 py-1.5 text-sm">
+            Credenciais
+          </Link>
+        )}
       </div>
 
       <ul className="space-y-3">
