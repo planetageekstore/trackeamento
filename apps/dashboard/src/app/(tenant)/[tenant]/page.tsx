@@ -78,9 +78,9 @@ export default async function TenantConfigPage({ params }: { params: Promise<{ t
       <section className="space-y-3 rounded-xl border bg-white p-5">
         <h2 className="font-medium">1. Instalar o rastreador no site</h2>
         <p className="text-sm text-neutral-600">
-          Cole este código no <code>&lt;head&gt;</code> do site do cliente. Se a loja for{" "}
-          <b>Nuvemshop</b>, você pode pular esta etapa e apenas conectar a loja abaixo — o rastreador
-          é injetado automaticamente.
+          Cole este código no <code>&lt;head&gt;</code> do site. Na <b>Nuvemshop</b>, vá em{" "}
+          <b>Configurações → Códigos externos</b> e cole ali. (Conectar a Nuvemshop abaixo cuida da
+          atribuição de vendas, mas o rastreador é colado manualmente.)
         </p>
         <CopyBlock code={snippet} />
       </section>
@@ -126,7 +126,7 @@ export default async function TenantConfigPage({ params }: { params: Promise<{ t
         />
         <ChannelRow
           title="Nuvemshop"
-          desc="Injeta o rastreador e captura vendas pagas."
+          desc="Captura vendas pagas para atribuição automática."
           status={<StatusPill ok={integ.get("nuvemshop") === "connected"} text={integ.has("nuvemshop") ? String(integ.get("nuvemshop")) : "não conectado"} />}
           href={`/api/oauth/nuvemshop/start?tenant=${tenant}`}
         />

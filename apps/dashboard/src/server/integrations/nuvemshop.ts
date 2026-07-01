@@ -40,26 +40,6 @@ function api(storeId: string | number, token: string, path: string, init?: Reque
   });
 }
 
-/** Injeta o tracker no storefront via POST /scripts (idempotente). */
-export async function injectScript(
-  storeId: string | number,
-  token: string,
-  siteKey: string,
-): Promise<void> {
-  const cdn = process.env.CDN_URL ?? process.env.APP_URL ?? "";
-  const src = `${cdn}/t/v1/tracker.js?sk=${siteKey}`;
-
-  const listed = await api(storeId, token, "/scripts");
-  if (listed.ok) {
-    const scripts = (await listed.json()) as Array<{ src?: string }>;
-    if (scripts.some((s) => s.src?.includes("/t/v1/tracker.js"))) return; // já injetado
-  }
-  await api(storeId, token, "/scripts", {
-    method: "POST",
-    body: JSON.stringify({ src, event: "onload", where: "store" }),
-  });
-}
-
 /** Registra o webhook order/paid (idempotente). */
 export async function registerOrderPaidWebhook(
   storeId: string | number,
@@ -77,8 +57,15 @@ export async function registerOrderPaidWebhook(
   });
 }
 
-/** Persiste a conexão (token cifrado) e roda injeção de script + webhook. */
-export async function connectNuvemshop(tenantId: string, code: string, siteKey: string): Promise<void> {
+/**
+ * Persiste a conexão (token cifrado) e registra o webhook de venda paga.
+ *
+ * NOTA: a injeção automática do tracker via `POST /scripts` foi descontinuada
+ * pela Nuvemshop (agora exige script registrado no Portal de Parceiros +
+ * auto-install). Por isso o tracker é instalado manualmente pelo lojista em
+ * Configurações → Códigos externos. Aqui cuidamos apenas do webhook (por API).
+ */
+export async function connectNuvemshop(tenantId: string, code: string): Promise<void> {
   const { access_token, user_id } = await exchangeCode(code);
   const supabase = createSupabaseServiceClient();
 
@@ -94,9 +81,13 @@ export async function connectNuvemshop(tenantId: string, code: string, siteKey: 
     { onConflict: "tenant_id,provider" },
   );
 
-  const webhookUrl = `${process.env.APP_URL}/api/webhooks/nuvemshop`;
-  await injectScript(user_id, access_token, siteKey);
-  await registerOrderPaidWebhook(user_id, access_token, webhookUrl);
+  // Webhook é best-effort: se falhar, o token já está salvo e reconectar tenta de novo.
+  try {
+    const webhookUrl = `${process.env.APP_URL}/api/webhooks/nuvemshop`;
+    await registerOrderPaidWebhook(user_id, access_token, webhookUrl);
+  } catch {
+    /* registrado numa próxima reconexão */
+  }
 }
 
 /** Busca uma venda para extrair nota/valor (usado no webhook). */

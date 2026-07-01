@@ -22,13 +22,13 @@ export async function GET(req: NextRequest): Promise<Response> {
   const supabase = createSupabaseServiceClient();
   const { data: tenant } = await supabase
     .from("tenant")
-    .select("id, site_key")
+    .select("id")
     .eq("id", state)
     .maybeSingle();
   if (!tenant) return Response.json({ error: "tenant_desconhecido" }, { status: 400 });
 
   try {
-    await connectNuvemshop(tenant.id, code, tenant.site_key);
+    await connectNuvemshop(tenant.id, code);
   } catch (err) {
     log.error("falha ao conectar Nuvemshop", { err: String(err), tenant: tenant.id });
     return Response.redirect(new URL(`/${tenant.id}/conversions?nuvemshop=erro`, req.url));
