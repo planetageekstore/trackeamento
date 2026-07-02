@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { cookies } from "next/headers";
-import { connectGoogle, exchangeCodeGoogle } from "@/server/integrations/google";
+import { connectGoogle, exchangeCodeGoogle, getGoogleCreds } from "@/server/integrations/google";
 import { createLogger } from "@trk/shared";
 
 export const runtime = "nodejs";
@@ -15,11 +15,18 @@ export async function GET(req: NextRequest): Promise<Response> {
   if (!bound || bound !== state) return Response.json({ error: "state_mismatch" }, { status: 400 });
 
   try {
-    const refresh = await exchangeCodeGoogle(code, `${process.env.APP_URL}/api/oauth/google`);
+    const creds = await getGoogleCreds(state);
+    if (!creds) throw new Error("Credenciais Google não configuradas");
+    const refresh = await exchangeCodeGoogle(
+      code,
+      `${req.nextUrl.origin}/api/oauth/google`,
+      creds.clientId,
+      creds.clientSecret,
+    );
     await connectGoogle(state, refresh);
   } catch (err) {
     log.error("falha ao conectar Google", { err: String(err), tenant: state });
-    return Response.redirect(new URL(`/${state}/connections?google=erro`, req.url));
+    return Response.redirect(new URL(`/${state}/integracoes?google=erro`, req.url));
   }
-  return Response.redirect(new URL(`/${state}/connections?google=ok`, req.url));
+  return Response.redirect(new URL(`/${state}/integracoes?google=ok`, req.url));
 }

@@ -110,6 +110,15 @@ export default async function SettingsPage() {
         help="Do painel do Uazapi. Ex.: https://jgtech.uazapi.com + o Admin Token. Usado para criar as instâncias e gerar o QR."
         current={creds.whatsapp}
       />
+
+      <CredentialForm
+        provider="google"
+        title="Google Ads (OAuth)"
+        idLabel="Client ID"
+        secretLabel="Client Secret"
+        help="Do Google Cloud Console → APIs e serviços → Credenciais → ID do cliente OAuth 2.0 (aplicativo da Web). Adicione o URI de redirecionamento https://trackeamento-dashboard.vercel.app/api/oauth/google."
+        current={creds.google}
+      />
     </main>
   );
 }

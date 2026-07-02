@@ -1,10 +1,25 @@
 import "server-only";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { encryptSecret, decryptSecret } from "@/server/crypto";
+import { getAppCredentials } from "@/server/appCredentials";
 import type { CampaignCostRow } from "./meta";
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const ADS_API = "https://googleads.googleapis.com/v17";
+
+/** Credenciais do app Google (client id/secret) da agência do tenant. */
+export async function getGoogleCreds(
+  tenantId: string,
+): Promise<{ clientId: string; clientSecret: string } | null> {
+  const { data: t } = await createSupabaseServiceClient()
+    .from("tenant")
+    .select("agency_id")
+    .eq("id", tenantId)
+    .maybeSingle();
+  if (!t) return null;
+  const { clientId, clientSecret } = await getAppCredentials(t.agency_id, "google");
+  return clientId && clientSecret ? { clientId, clientSecret } : null;
+}
 
 export interface GoogleAdsRow {
   campaign?: { id?: string; name?: string };
@@ -29,13 +44,17 @@ export function mapGoogleRowsToCosts(rows: GoogleAdsRow[], tenantId: string): Ca
     }));
 }
 
-async function refreshAccessToken(refreshToken: string): Promise<string> {
+async function refreshAccessToken(
+  refreshToken: string,
+  clientId: string,
+  clientSecret: string,
+): Promise<string> {
   const res = await fetch(TOKEN_URL, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
-      client_id: process.env.GOOGLE_CLIENT_ID ?? "",
-      client_secret: process.env.GOOGLE_CLIENT_SECRET ?? "",
+      client_id: clientId,
+      client_secret: clientSecret,
       refresh_token: refreshToken,
       grant_type: "refresh_token",
     }),
@@ -45,13 +64,18 @@ async function refreshAccessToken(refreshToken: string): Promise<string> {
 }
 
 /** Troca o code por refresh_token (offline). */
-export async function exchangeCodeGoogle(code: string, redirectUri: string): Promise<string> {
+export async function exchangeCodeGoogle(
+  code: string,
+  redirectUri: string,
+  clientId: string,
+  clientSecret: string,
+): Promise<string> {
   const res = await fetch(TOKEN_URL, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
-      client_id: process.env.GOOGLE_CLIENT_ID ?? "",
-      client_secret: process.env.GOOGLE_CLIENT_SECRET ?? "",
+      client_id: clientId,
+      client_secret: clientSecret,
       code,
       redirect_uri: redirectUri,
       grant_type: "authorization_code",
@@ -83,7 +107,9 @@ export async function discoverGoogleCustomer(accessToken: string): Promise<strin
 
 /** Persiste a conexão Google (refresh token cifrado + customer). */
 export async function connectGoogle(tenantId: string, refreshToken: string): Promise<void> {
-  const access = await refreshAccessToken(refreshToken);
+  const creds = await getGoogleCreds(tenantId);
+  if (!creds) throw new Error("Credenciais Google não configuradas");
+  const access = await refreshAccessToken(refreshToken, creds.clientId, creds.clientSecret);
   const customerId = await discoverGoogleCustomer(access);
   const supabase = createSupabaseServiceClient();
   await supabase.from("integration").upsert(
@@ -113,9 +139,11 @@ export async function importGoogleCosts(tenantId: string): Promise<number> {
     .eq("provider", "google")
     .maybeSingle();
   if (!integ?.account_ref || !integ.refresh_token_enc) return 0;
+  const creds = await getGoogleCreds(tenantId);
+  if (!creds) return 0;
 
   const refreshToken = await decryptSecret(integ.refresh_token_enc as string);
-  const access = await refreshAccessToken(refreshToken);
+  const access = await refreshAccessToken(refreshToken, creds.clientId, creds.clientSecret);
 
   const res = await fetch(`${ADS_API}/customers/${integ.account_ref}/googleAds:searchStream`, {
     method: "POST",
