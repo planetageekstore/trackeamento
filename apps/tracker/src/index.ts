@@ -56,6 +56,32 @@ declare global {
       const cur = getStoredId();
       if (cur) sendEvent(apiBase, siteKey, cur, "WHATSAPP_CLICK");
     });
+
+    // Rastreia navegação em SPA (History API): cada troca de rota emite um novo
+    // PAGE_VIEW com a URL atual, sem depender de reload (FR-022). Sites clássicos
+    // recarregam a página e re-executam este script, então não precisam disto.
+    let lastUrl = window.location.href;
+    const onRouteChange = () => {
+      try {
+        const href = window.location.href;
+        if (href === lastUrl) return; // evita duplicar a mesma rota
+        lastUrl = href;
+        const cur = getStoredId();
+        if (cur) sendEvent(apiBase, siteKey, cur, "PAGE_VIEW", { origin: parseOrigin() });
+      } catch {
+        /* silencioso */
+      }
+    };
+    const hist = window.history;
+    for (const m of ["pushState", "replaceState"] as const) {
+      const orig = hist[m];
+      hist[m] = function (this: History, ...args: Parameters<History["pushState"]>) {
+        const r = orig.apply(this, args);
+        onRouteChange();
+        return r;
+      };
+    }
+    window.addEventListener("popstate", onRouteChange);
   } catch {
     /* silencioso por design (FR-006 / Princípio III) */
   }

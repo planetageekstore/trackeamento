@@ -31,8 +31,19 @@ export default async function LeadDetailPage({
       .from("click")
       .select("utm_source, utm_campaign, fbclid, gclid, landing_page_url, clicked_at")
       .eq("lead_id", leadId),
-    supabase.from("event").select("event_type, value, occurred_at").eq("lead_id", leadId),
+    supabase.from("event").select("event_type, value, event_data, occurred_at").eq("lead_id", leadId),
   ]);
+
+  // Extrai o caminho (path) de uma URL para exibir a rota de forma enxuta.
+  const toPath = (url: unknown): string => {
+    if (typeof url !== "string" || !url) return "";
+    try {
+      const u = new URL(url);
+      return u.pathname + u.search;
+    } catch {
+      return url;
+    }
+  };
 
   const journey: JourneyItem[] = [
     ...(clicks ?? []).map((c) => ({
@@ -43,12 +54,17 @@ export default async function LeadDetailPage({
         .join(" · "),
       at: c.clicked_at as string,
     })),
-    ...(events ?? []).map((e) => ({
-      kind: "event" as const,
-      label: e.event_type as string,
-      detail: e.value ? `R$ ${e.value}` : "",
-      at: e.occurred_at as string,
-    })),
+    ...(events ?? []).map((e) => {
+      const data = (e.event_data ?? {}) as Record<string, unknown>;
+      const path = toPath(data.url);
+      const detail = e.value ? `R$ ${e.value}` : path;
+      return {
+        kind: "event" as const,
+        label: e.event_type as string,
+        detail,
+        at: e.occurred_at as string,
+      };
+    }),
   ].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
 
   return (

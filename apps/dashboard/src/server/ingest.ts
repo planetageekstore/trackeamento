@@ -65,7 +65,7 @@ export async function ingestEvents(
       lead_id: leadId,
       event_type: ev.type,
       source: "tracker",
-      event_data: ev.data ?? {},
+      event_data: { url: ev.url ?? null, referrer: ev.referrer ?? null, ...(ev.data ?? {}) },
       occurred_at: ev.occurred_at ?? new Date().toISOString(),
     });
   }
