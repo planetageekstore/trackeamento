@@ -2,7 +2,7 @@ import Link from "next/link";
 import { requireUser, assertTenantAccess } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { CopyBlock } from "@/components/CopyBlock";
-import { addDomain, removeDomain } from "./actions";
+import { addDomain, removeDomain, disconnectIntegration } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -23,13 +23,19 @@ function StatusPill({ ok, text }: { ok: boolean; text: string }) {
 function ChannelRow({
   title,
   desc,
-  status,
+  connected,
+  statusText,
   href,
+  tenant,
+  provider,
 }: {
   title: string;
   desc: string;
-  status: React.ReactNode;
+  connected: boolean;
+  statusText: string;
   href: string;
+  tenant: string;
+  provider: string;
 }) {
   return (
     <div className="flex items-center justify-between gap-4 border-b py-3 last:border-0">
@@ -38,10 +44,17 @@ function ChannelRow({
         <p className="text-sm text-neutral-500">{desc}</p>
       </div>
       <div className="flex items-center gap-3">
-        {status}
+        <StatusPill ok={connected} text={statusText} />
         <Link href={href} className="rounded-lg border px-3 py-1.5 text-sm">
-          Conectar
+          {connected ? "Reconectar" : "Conectar"}
         </Link>
+        {connected && (
+          <form action={disconnectIntegration}>
+            <input type="hidden" name="tenantId" value={tenant} />
+            <input type="hidden" name="provider" value={provider} />
+            <button className="text-sm text-red-600 hover:underline">Desconectar</button>
+          </form>
+        )}
       </div>
     </div>
   );
@@ -121,26 +134,38 @@ export default async function TenantConfigPage({ params }: { params: Promise<{ t
         <ChannelRow
           title="WhatsApp"
           desc="Conecte por QR code para atribuir conversas."
-          status={<StatusPill ok={wa?.status === "open"} text={wa?.status === "open" ? "conectado" : "não conectado"} />}
+          connected={wa?.status === "open"}
+          statusText={wa?.status === "open" ? "conectado" : "não conectado"}
           href={`/${tenant}/whatsapp`}
+          tenant={tenant}
+          provider="whatsapp"
         />
         <ChannelRow
           title="Nuvemshop"
           desc="Captura vendas pagas para atribuição automática."
-          status={<StatusPill ok={integ.get("nuvemshop") === "connected"} text={integ.has("nuvemshop") ? String(integ.get("nuvemshop")) : "não conectado"} />}
+          connected={integ.get("nuvemshop") === "connected"}
+          statusText={integ.has("nuvemshop") ? String(integ.get("nuvemshop")) : "não conectado"}
           href={`/api/oauth/nuvemshop/start?tenant=${tenant}`}
+          tenant={tenant}
+          provider="nuvemshop"
         />
         <ChannelRow
           title="Meta Ads"
           desc="Importa custos e envia conversões (CAPI)."
-          status={<StatusPill ok={integ.get("meta") === "connected"} text={integ.has("meta") ? String(integ.get("meta")) : "não conectado"} />}
+          connected={integ.get("meta") === "connected"}
+          statusText={integ.has("meta") ? String(integ.get("meta")) : "não conectado"}
           href={`/${tenant}/meta`}
+          tenant={tenant}
+          provider="meta"
         />
         <ChannelRow
           title="Google Ads"
           desc="Importa custos e envia conversões offline."
-          status={<StatusPill ok={integ.get("google") === "connected"} text={integ.has("google") ? String(integ.get("google")) : "não conectado"} />}
+          connected={integ.get("google") === "connected"}
+          statusText={integ.has("google") ? String(integ.get("google")) : "não conectado"}
           href={`/api/oauth/google/start?tenant=${tenant}`}
+          tenant={tenant}
+          provider="google"
         />
       </section>
 

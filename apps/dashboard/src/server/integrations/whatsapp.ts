@@ -1,4 +1,5 @@
 import "server-only";
+import { createSupabaseServiceClient } from "@/lib/supabase/service";
 
 function workerFetch(path: string, init?: RequestInit): Promise<Response> {
   const base = process.env.WORKER_URL;
@@ -30,4 +31,16 @@ export async function whatsappStatus(tenantId: string): Promise<WhatsappState> {
   const res = await workerFetch(`/instances/${tenantId}/state`);
   if (!res.ok) throw new Error(`worker /state => ${res.status}`);
   return (await res.json()) as WhatsappState;
+}
+
+/** Desconecta o WhatsApp: logout no worker (best-effort) + limpa o registro. */
+export async function disconnectWhatsApp(tenantId: string): Promise<void> {
+  try {
+    await workerFetch(`/instances/${tenantId}/logout`, { method: "POST" });
+  } catch {
+    /* worker indisponível — limpamos o DB mesmo assim */
+  }
+  const supabase = createSupabaseServiceClient();
+  await supabase.from("whatsapp_instance").delete().eq("tenant_id", tenantId);
+  await supabase.from("whatsapp_session").delete().eq("tenant_id", tenantId);
 }

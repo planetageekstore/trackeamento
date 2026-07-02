@@ -1,6 +1,6 @@
 import "server-only";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
-import { encryptSecret } from "@/server/crypto";
+import { encryptSecret, decryptSecret } from "@/server/crypto";
 import { getAppCredentials } from "@/server/appCredentials";
 
 const API_BASE = "https://api.tiendanube.com/v1";
@@ -101,6 +101,36 @@ export async function connectNuvemshop(tenantId: string, code: string): Promise<
   } catch {
     /* registrado numa próxima reconexão */
   }
+}
+
+/** Cancela a integração Nuvemshop: remove o webhook order/paid e apaga o registro. */
+export async function disconnectNuvemshop(tenantId: string): Promise<void> {
+  const supabase = createSupabaseServiceClient();
+  const { data: integ } = await supabase
+    .from("integration")
+    .select("account_ref, access_token_enc")
+    .eq("tenant_id", tenantId)
+    .eq("provider", "nuvemshop")
+    .maybeSingle();
+
+  if (integ?.account_ref && integ.access_token_enc) {
+    try {
+      const token = await decryptSecret(integ.access_token_enc as string);
+      const listed = await api(integ.account_ref as string, token, "/webhooks");
+      if (listed.ok) {
+        const hooks = (await listed.json()) as Array<{ id?: number; event?: string }>;
+        for (const h of hooks) {
+          if (h.event === "order/paid" && h.id) {
+            await api(integ.account_ref as string, token, `/webhooks/${h.id}`, { method: "DELETE" });
+          }
+        }
+      }
+    } catch {
+      /* best-effort: mesmo que a API falhe, removemos o registro abaixo */
+    }
+  }
+
+  await supabase.from("integration").delete().eq("tenant_id", tenantId).eq("provider", "nuvemshop");
 }
 
 /** Busca uma venda para extrair nota/valor (usado no webhook). */

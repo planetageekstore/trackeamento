@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireUser, assertTenantAccess } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { connectMetaToken } from "./actions";
+import { disconnectIntegration } from "../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -31,9 +32,16 @@ export default async function MetaConfigPage({ params }: { params: Promise<{ ten
       </div>
 
       {connected && (
-        <div className="rounded-lg bg-emerald-50 p-4 text-sm text-emerald-800">
-          ✓ Conectado — conta <code>{integ?.account_ref ?? "?"}</code>
-          {pixelId ? ` · pixel ${pixelId}` : " · pixel não detectado"}
+        <div className="flex items-center justify-between gap-4 rounded-lg bg-emerald-50 p-4 text-sm text-emerald-800">
+          <span>
+            ✓ Conectado — conta <code>{integ?.account_ref ?? "?"}</code>
+            {pixelId ? ` · pixel ${pixelId}` : " · pixel não detectado"}
+          </span>
+          <form action={disconnectIntegration}>
+            <input type="hidden" name="tenantId" value={tenant} />
+            <input type="hidden" name="provider" value="meta" />
+            <button className="shrink-0 text-red-600 hover:underline">Desconectar</button>
+          </form>
         </div>
       )}
 

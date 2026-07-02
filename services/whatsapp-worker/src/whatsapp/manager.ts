@@ -131,6 +131,23 @@ export function getSessionState(tenantId: string): { qr: string | null; state: S
   return s ? { qr: s.qr, state: s.state } : { qr: null, state: "close" };
 }
 
+/** Desconecta o WhatsApp: logout no dispositivo, limpa sessão e estado. */
+export async function disconnectTenant(tenantId: string): Promise<void> {
+  const s = sessions.get(tenantId);
+  if (s) {
+    try {
+      await s.sock.logout();
+    } catch {
+      /* já desconectado */
+    }
+    sessions.delete(tenantId);
+  }
+  const db = supabase();
+  await db.from("whatsapp_session").delete().eq("tenant_id", tenantId);
+  await db.from("whatsapp_instance").update({ status: "close", phone_number: null }).eq("tenant_id", tenantId);
+  log.info("whatsapp desconectado", { tenantId });
+}
+
 /** Retoma sessões já autenticadas ao subir o worker (evita re-scan de QR). */
 export async function resumeSessions(): Promise<void> {
   const { data } = await supabase().from("whatsapp_session").select("tenant_id");

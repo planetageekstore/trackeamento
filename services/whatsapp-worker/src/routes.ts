@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { createLogger } from "@trk/shared";
 import { env } from "./supabase.js";
-import { connectTenant, getSessionState } from "./whatsapp/manager.js";
+import { connectTenant, getSessionState, disconnectTenant } from "./whatsapp/manager.js";
 import { dispatchConversion } from "./ingest/dispatch.js";
 
 const log = createLogger({ mod: "routes" });
@@ -33,6 +33,14 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     if (!authorized(bearer(req))) return reply.code(401).send({ error: "unauthorized" });
     const { tenantId } = req.params as { tenantId: string };
     return reply.send(getSessionState(tenantId));
+  });
+
+  // Desconectar (logout) a sessão de WhatsApp do tenant.
+  app.post("/instances/:tenantId/logout", async (req, reply) => {
+    if (!authorized(bearer(req))) return reply.code(401).send({ error: "unauthorized" });
+    const { tenantId } = req.params as { tenantId: string };
+    await disconnectTenant(tenantId).catch((err) => log.error("logout falhou", { err: String(err) }));
+    return reply.code(202).send({ ok: true });
   });
 
   // Dispara envio de conversão server-side (usado pelo dashboard no PURCHASE).
