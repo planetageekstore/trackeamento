@@ -54,10 +54,10 @@ export default async function MetaConfigPage({ params }: { params: Promise<{ ten
 
       {connected && (
         <Link
-          href={`/${tenant}/meta/ads`}
+          href={`/${tenant}/campaigns`}
           className="block rounded-xl border bg-white p-4 text-sm font-medium hover:bg-neutral-50"
         >
-          📊 Ver anúncios e criativos (por conta, período, campanha → conjunto → criativo) →
+          📊 Ver campanhas e criativos (por conta, período, campanha → conjunto → criativo) →
         </Link>
       )}
 
