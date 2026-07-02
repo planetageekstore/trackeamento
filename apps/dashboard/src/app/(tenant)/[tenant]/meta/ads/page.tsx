@@ -112,7 +112,6 @@ export default async function MetaAdsPage({
                 <tr key={r.adId} className="border-b align-middle">
                   <td className="py-2">
                     {r.thumbnail ? (
-                      // eslint-disable-next-line @next/next/no-img-element
                       <img src={r.thumbnail} alt="" className="h-11 w-11 rounded object-cover" />
                     ) : (
                       <div className="h-11 w-11 rounded bg-neutral-100" />
