@@ -52,6 +52,15 @@ export default async function MetaConfigPage({ params }: { params: Promise<{ ten
         </div>
       )}
 
+      {connected && (
+        <Link
+          href={`/${tenant}/meta/ads`}
+          className="block rounded-xl border bg-white p-4 text-sm font-medium hover:bg-neutral-50"
+        >
+          📊 Ver anúncios e criativos (por conta, período, campanha → conjunto → criativo) →
+        </Link>
+      )}
+
       <section className="space-y-3 rounded-xl border bg-white p-5">
         <h2 className="font-medium">Conectar com token (recomendado)</h2>
         <p className="text-sm text-neutral-600">

@@ -129,6 +129,124 @@ export async function saveMetaToken(
   return { ok: true, adAccountId: acc };
 }
 
+async function metaToken(
+  tenantId: string,
+): Promise<{ token: string; accountRef: string | null } | null> {
+  const supabase = createSupabaseServiceClient();
+  const { data } = await supabase
+    .from("integration")
+    .select("access_token_enc, account_ref")
+    .eq("tenant_id", tenantId)
+    .eq("provider", "meta")
+    .maybeSingle();
+  if (!data?.access_token_enc) return null;
+  return { token: await decryptSecret(data.access_token_enc as string), accountRef: data.account_ref };
+}
+
+/** Lista as contas de anúncios (BMs) que o token acessa. */
+export async function listAdAccounts(
+  tenantId: string,
+): Promise<{ id: string; name: string }[]> {
+  const t = await metaToken(tenantId);
+  if (!t) return [];
+  const res = await fetch(
+    `${GRAPH()}/me/adaccounts?fields=account_id,name&limit=200&access_token=${t.token}`,
+  );
+  if (!res.ok) return [];
+  const j = (await res.json()) as { data?: Array<{ account_id: string; name?: string }> };
+  return (j.data ?? []).map((a) => ({ id: a.account_id, name: a.name ?? a.account_id }));
+}
+
+export interface AdRow {
+  adId: string;
+  campaign: string;
+  adset: string;
+  ad: string;
+  thumbnail: string | null;
+  status: string;
+  spend: number;
+  impressions: number;
+  clicks: number;
+}
+
+/**
+ * Relatório de anúncios (criativos) de uma conta no período: campanha → conjunto
+ * → anúncio, com miniatura do criativo e métricas. Puxa ao vivo da Graph API.
+ */
+export async function getAdsReport(
+  tenantId: string,
+  accountId: string | null,
+  since: string,
+  until: string,
+): Promise<AdRow[]> {
+  const t = await metaToken(tenantId);
+  if (!t) return [];
+  const acc = (accountId || t.accountRef || "").replace(/^act_/, "");
+  if (!acc) return [];
+
+  // 1) Todos os anúncios com miniatura do criativo
+  const ads = new Map<string, AdRow>();
+  let adsUrl: string | null =
+    `${GRAPH()}/act_${acc}/ads?fields=id,name,effective_status,adset{name},campaign{name},` +
+    `creative{thumbnail_url}&limit=200&access_token=${t.token}`;
+  for (let p = 0; adsUrl && p < 5; p++) {
+    const r: Response = await fetch(adsUrl);
+    if (!r.ok) break;
+    const j = (await r.json()) as {
+      data?: Array<{
+        id: string;
+        name?: string;
+        effective_status?: string;
+        adset?: { name?: string };
+        campaign?: { name?: string };
+        creative?: { thumbnail_url?: string };
+      }>;
+      paging?: { next?: string };
+    };
+    for (const a of j.data ?? []) {
+      ads.set(a.id, {
+        adId: a.id,
+        campaign: a.campaign?.name ?? "—",
+        adset: a.adset?.name ?? "—",
+        ad: a.name ?? "—",
+        thumbnail: a.creative?.thumbnail_url ?? null,
+        status: a.effective_status ?? "",
+        spend: 0,
+        impressions: 0,
+        clicks: 0,
+      });
+    }
+    adsUrl = j.paging?.next ?? null;
+  }
+
+  // 2) Insights por anúncio no período → mescla métricas
+  const tr = encodeURIComponent(JSON.stringify({ since, until }));
+  let insUrl: string | null =
+    `${GRAPH()}/act_${acc}/insights?level=ad&fields=ad_id,spend,impressions,clicks` +
+    `&time_range=${tr}&limit=500&access_token=${t.token}`;
+  for (let p = 0; insUrl && p < 10; p++) {
+    const r: Response = await fetch(insUrl);
+    if (!r.ok) break;
+    const j = (await r.json()) as {
+      data?: Array<{ ad_id: string; spend?: string; impressions?: string; clicks?: string }>;
+      paging?: { next?: string };
+    };
+    for (const row of j.data ?? []) {
+      const a = ads.get(row.ad_id);
+      if (a) {
+        a.spend += Number(row.spend ?? 0);
+        a.impressions += Number(row.impressions ?? 0);
+        a.clicks += Number(row.clicks ?? 0);
+      }
+    }
+    insUrl = j.paging?.next ?? null;
+  }
+
+  return [...ads.values()].sort(
+    (x, y) => x.campaign.localeCompare(y.campaign) || x.adset.localeCompare(y.adset),
+  );
+}
+
 /** Importa custos das últimas N janelas diárias e faz upsert em campaign_cost. */
 export async function importMetaCosts(tenantId: string, days = 7): Promise<number> {
   const supabase = createSupabaseServiceClient();
