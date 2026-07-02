@@ -35,7 +35,8 @@ export async function GET(req: NextRequest): Promise<Response> {
   const ver = process.env.META_API_VERSION ?? "v21.0";
   const url = new URL(`https://www.facebook.com/${ver}/dialog/oauth`);
   url.searchParams.set("client_id", clientId);
-  url.searchParams.set("redirect_uri", `${process.env.APP_URL}/api/oauth/meta`);
+  // redirect_uri derivado da origem real da requisição (evita depender de APP_URL).
+  url.searchParams.set("redirect_uri", `${req.nextUrl.origin}/api/oauth/meta`);
   url.searchParams.set("state", tenantId);
   url.searchParams.set("scope", "ads_read,ads_management");
   return Response.redirect(url.toString());

@@ -27,7 +27,7 @@ export async function GET(req: NextRequest): Promise<Response> {
 
     const token = await exchangeCodeMeta(
       code,
-      `${process.env.APP_URL}/api/oauth/meta`,
+      `${req.nextUrl.origin}/api/oauth/meta`,
       clientId,
       clientSecret,
     );
