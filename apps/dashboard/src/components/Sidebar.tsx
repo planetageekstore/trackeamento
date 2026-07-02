@@ -20,7 +20,8 @@ export function Sidebar({ tenant, tenantName }: { tenant: string; tenantName: st
     { label: "Leads", href: `/${tenant}/leads`, icon: "👥" },
     { label: "Conversões", href: `/${tenant}/conversions`, icon: "🎯" },
     { label: "Campanhas", href: `/${tenant}/campaigns`, icon: "📣" },
-    { label: "WhatsApp", href: `/${tenant}/whatsapp`, icon: "💬" },
+    { label: "Conversas", href: `/${tenant}/conversas`, icon: "💬" },
+    { label: "WhatsApp", href: `/${tenant}/whatsapp`, icon: "🔗" },
     { label: "Integrações", href: `/${tenant}/integracoes`, icon: "🔌" },
   ];
 

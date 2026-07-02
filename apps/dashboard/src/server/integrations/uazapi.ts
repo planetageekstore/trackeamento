@@ -134,6 +134,89 @@ export async function disconnectWhatsApp(tenantId: string): Promise<void> {
   await createSupabaseServiceClient().from("whatsapp_instance").delete().eq("tenant_id", tenantId);
 }
 
+// ---- Caixa de entrada (somente leitura) ----------------------------------
+type AnyObj = Record<string, unknown>;
+function pick(o: AnyObj, keys: string[]): unknown {
+  for (const k of keys) {
+    const v = k.split(".").reduce<unknown>((acc, p) => (acc as AnyObj)?.[p], o);
+    if (v !== undefined && v !== null && v !== "") return v;
+  }
+  return undefined;
+}
+const str = (v: unknown): string => (typeof v === "string" ? v : "");
+
+export interface ChatItem {
+  id: string;
+  name: string;
+  phone: string;
+  photo: string | null;
+  lastMessage: string;
+  unread: number;
+}
+
+function mapChat(c: AnyObj): ChatItem {
+  const id = str(pick(c, ["wa_chatid", "id", "chatid", "jid", "wa_fastid"]));
+  const num = id.split("@")[0] ?? "";
+  return {
+    id,
+    name: str(pick(c, ["wa_name", "name", "pushName", "verifiedName", "profileName"])) || num,
+    phone: num,
+    photo: (pick(c, ["image", "imagePreview", "profilePicUrl", "photo"]) as string) || null,
+    lastMessage: str(
+      pick(c, ["lastMessage.text", "lastMessageText", "wa_lastMessageText", "lastMessage.content"]),
+    ),
+    unread: Number(pick(c, ["wa_unreadCount", "unreadCount", "unread"]) ?? 0),
+  };
+}
+
+export interface MsgItem {
+  id: string;
+  text: string;
+  fromMe: boolean;
+  timestamp: number;
+}
+
+function mapMsg(m: AnyObj): MsgItem {
+  return {
+    id: str(pick(m, ["id", "messageid", "messageId", "key.id"])),
+    text: str(
+      pick(m, ["text", "content", "body", "message.text", "message.conversation", "caption"]),
+    ),
+    fromMe: Boolean(pick(m, ["fromMe", "fromme", "key.fromMe"])),
+    timestamp: Number(pick(m, ["messageTimestamp", "timestamp", "t", "moment"]) ?? 0),
+  };
+}
+
+/** Lista as conversas (chats) da instância — sem grupos. */
+export async function listChats(tenantId: string): Promise<ChatItem[]> {
+  const inst = await getInstance(tenantId);
+  if (!inst) return [];
+  const res = await uaz(inst.serverUrl, "/chat/find", {
+    method: "POST",
+    headers: { token: inst.token },
+    body: JSON.stringify({ limit: 300 }),
+  });
+  if (!res.ok) return [];
+  const j = (await res.json()) as { chats?: AnyObj[] };
+  return (j.chats ?? [])
+    .filter((c) => !str(pick(c, ["wa_chatid", "id", "jid"])).endsWith("@g.us"))
+    .map(mapChat);
+}
+
+/** Mensagens de uma conversa (somente leitura). */
+export async function getMessages(tenantId: string, chatId: string): Promise<MsgItem[]> {
+  const inst = await getInstance(tenantId);
+  if (!inst) return [];
+  const res = await uaz(inst.serverUrl, "/message/find", {
+    method: "POST",
+    headers: { token: inst.token },
+    body: JSON.stringify({ chatid: chatId, limit: 60 }),
+  });
+  if (!res.ok) return [];
+  const j = (await res.json()) as { messages?: AnyObj[] };
+  return (j.messages ?? []).map(mapMsg).sort((a, b) => a.timestamp - b.timestamp);
+}
+
 /** Resolve o tenant a partir do nome da instância (usado no webhook). */
 export async function tenantByInstanceName(instanceName: string): Promise<string | null> {
   const { data } = await createSupabaseServiceClient()
