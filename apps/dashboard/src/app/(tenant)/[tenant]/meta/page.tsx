@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireUser, assertTenantAccess } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getAppCredentials } from "@/server/appCredentials";
 import { connectMetaToken } from "./actions";
 import { disconnectIntegration } from "../actions";
 
@@ -12,6 +13,7 @@ export default async function MetaConfigPage({ params }: { params: Promise<{ ten
   await assertTenantAccess(tenant);
 
   const supabase = await createSupabaseServerClient();
+  const { data: tRow } = await supabase.from("tenant").select("agency_id").eq("id", tenant).maybeSingle();
   const { data: integ } = await supabase
     .from("integration")
     .select("status, account_ref, meta")
@@ -21,6 +23,11 @@ export default async function MetaConfigPage({ params }: { params: Promise<{ ten
 
   const connected = integ?.status === "connected";
   const pixelId = (integ?.meta as { pixel_id?: string } | null)?.pixel_id ?? null;
+
+  // OAuth só faz sentido se o App ID do Meta estiver configurado (DB ou env).
+  const hasOauthApp = tRow
+    ? Boolean((await getAppCredentials(tRow.agency_id, "meta")).clientId)
+    : false;
 
   return (
     <main className="mx-auto max-w-2xl space-y-6 p-8">
@@ -82,19 +89,31 @@ export default async function MetaConfigPage({ params }: { params: Promise<{ ten
         </form>
       </section>
 
-      <section className="rounded-xl border bg-white p-5">
-        <h2 className="font-medium">Ou conectar com login do Facebook</h2>
-        <p className="mt-1 text-sm text-neutral-600">
-          Alternativa via OAuth. Requer o app configurado e, para contas de terceiros, revisão do
-          Meta. O token pode expirar.
-        </p>
-        <Link
-          href={`/api/oauth/meta/start?tenant=${tenant}`}
-          className="mt-3 inline-block rounded-lg border px-3 py-1.5 text-sm"
-        >
-          Login com Facebook
-        </Link>
-      </section>
+      {hasOauthApp ? (
+        <section className="rounded-xl border bg-white p-5">
+          <h2 className="font-medium">Ou conectar com login do Facebook</h2>
+          <p className="mt-1 text-sm text-neutral-600">
+            Alternativa via OAuth. Confirme que o URI de redirecionamento{" "}
+            <code>/api/oauth/meta</code> está cadastrado no app do Meta. Para contas de terceiros, o
+            Meta exige revisão. O token pode expirar.
+          </p>
+          <Link
+            href={`/api/oauth/meta/start?tenant=${tenant}`}
+            className="mt-3 inline-block rounded-lg border px-3 py-1.5 text-sm"
+          >
+            Login com Facebook
+          </Link>
+        </section>
+      ) : (
+        <section className="rounded-xl border border-dashed bg-neutral-50 p-5 text-sm text-neutral-600">
+          <b>Login com Facebook (opcional)</b> — disponível após cadastrar o App ID e a Chave Secreta
+          do Meta em{" "}
+          <Link href="/settings" className="underline">
+            Credenciais
+          </Link>
+          . Para a maioria dos casos, o token de System User acima já resolve.
+        </section>
+      )}
     </main>
   );
 }
