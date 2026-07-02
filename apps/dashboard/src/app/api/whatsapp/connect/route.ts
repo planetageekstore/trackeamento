@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { connectWhatsApp } from "@/server/integrations/whatsapp";
+import { connectWhatsApp } from "@/server/integrations/uazapi";
 
 export const runtime = "nodejs";
 
@@ -21,8 +21,8 @@ export async function POST(req: NextRequest): Promise<Response> {
   if (!(await canAccess(tenantId))) return Response.json({ error: "forbidden" }, { status: 403 });
 
   try {
-    return Response.json(await connectWhatsApp(tenantId));
-  } catch {
-    return Response.json({ error: "worker_unavailable" }, { status: 502 });
+    return Response.json(await connectWhatsApp(tenantId, req.nextUrl.origin));
+  } catch (err) {
+    return Response.json({ error: String(err) }, { status: 502 });
   }
 }

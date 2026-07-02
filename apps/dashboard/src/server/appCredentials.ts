@@ -2,7 +2,7 @@ import "server-only";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { encryptSecret, decryptSecret } from "@/server/crypto";
 
-type Provider = "meta" | "nuvemshop" | "google";
+type Provider = "meta" | "nuvemshop" | "google" | "whatsapp";
 
 /**
  * Credenciais do app parceiro (client id/secret) por agência, com fallback para
@@ -35,6 +35,8 @@ export async function getAppCredentials(
     meta: { id: process.env.META_APP_ID, secret: process.env.META_APP_SECRET },
     nuvemshop: { id: process.env.NUVEMSHOP_CLIENT_ID, secret: process.env.NUVEMSHOP_CLIENT_SECRET },
     google: { id: process.env.GOOGLE_CLIENT_ID, secret: process.env.GOOGLE_CLIENT_SECRET },
+    // WhatsApp = Uazapi: client_id = server URL, client_secret = admin token
+    whatsapp: { id: process.env.UAZAPI_SERVER_URL, secret: process.env.UAZAPI_ADMIN_TOKEN },
   };
   clientId = clientId ?? envMap[provider].id ?? null;
   clientSecret = clientSecret ?? envMap[provider].secret ?? null;

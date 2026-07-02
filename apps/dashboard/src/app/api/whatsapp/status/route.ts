@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { whatsappStatus } from "@/server/integrations/whatsapp";
+import { whatsappStatus } from "@/server/integrations/uazapi";
 
 export const runtime = "nodejs";
 

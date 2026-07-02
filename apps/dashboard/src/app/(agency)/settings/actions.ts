@@ -12,8 +12,12 @@ export async function saveCredentials(formData: FormData): Promise<void> {
     throw new Error("Apenas administradores da agência.");
   }
 
-  const provider = String(formData.get("provider") ?? "") as "meta" | "nuvemshop" | "google";
-  if (!["meta", "nuvemshop", "google"].includes(provider)) return;
+  const provider = String(formData.get("provider") ?? "") as
+    | "meta"
+    | "nuvemshop"
+    | "google"
+    | "whatsapp";
+  if (!["meta", "nuvemshop", "google", "whatsapp"].includes(provider)) return;
 
   const clientId = String(formData.get("clientId") ?? "").trim();
   const clientSecret = String(formData.get("clientSecret") ?? "").trim();

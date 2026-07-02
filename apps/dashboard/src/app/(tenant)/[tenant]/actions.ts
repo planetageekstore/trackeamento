@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { requireUser } from "@/lib/auth";
-import { disconnectWhatsApp } from "@/server/integrations/whatsapp";
+import { disconnectWhatsApp } from "@/server/integrations/uazapi";
 import { disconnectNuvemshop } from "@/server/integrations/nuvemshop";
 
 /** Normaliza uma entrada (URL completa ou host) para apenas o hostname. */

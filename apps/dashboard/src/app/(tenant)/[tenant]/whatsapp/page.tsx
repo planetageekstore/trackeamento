@@ -21,7 +21,7 @@ export default function WhatsAppPage({ params }: { params: Promise<{ tenant: str
       if (!res.ok) throw new Error();
       const data = (await res.json()) as { qr: string | null; state: string };
       setQr(data.qr);
-      if (data.state === "open") setStatus("open");
+      if ((data.state === "open" || data.state === "connected")) setStatus("open");
     } catch {
       setStatus("error");
     }
@@ -34,7 +34,7 @@ export default function WhatsAppPage({ params }: { params: Promise<{ tenant: str
       try {
         const res = await fetch(`/api/whatsapp/status?tenantId=${tenant}`);
         const data = (await res.json()) as { qr: string | null; state: string };
-        if (data.state === "open") {
+        if ((data.state === "open" || data.state === "connected")) {
           setStatus("open");
           setQr(null);
         } else if (data.qr) {

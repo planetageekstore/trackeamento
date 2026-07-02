@@ -101,6 +101,15 @@ export default async function SettingsPage() {
         help="Do Meta for Developers → seu app → Configurações → Básico. (Opcional se você conectar via token de System User.)"
         current={creds.meta}
       />
+
+      <CredentialForm
+        provider="whatsapp"
+        title="WhatsApp (Uazapi)"
+        idLabel="Server URL"
+        secretLabel="Admin Token"
+        help="Do painel do Uazapi. Ex.: https://jgtech.uazapi.com + o Admin Token. Usado para criar as instâncias e gerar o QR."
+        current={creds.whatsapp}
+      />
     </main>
   );
 }
