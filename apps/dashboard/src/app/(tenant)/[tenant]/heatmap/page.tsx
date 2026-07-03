@@ -1,6 +1,7 @@
 import { requireUser, assertTenantAccess } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { HeatmapCanvas, type HeatCell } from "@/components/HeatmapCanvas";
+import { ScrollMap, type ScrollBucket } from "@/components/ScrollMap";
 
 export const dynamic = "force-dynamic";
 
@@ -32,11 +33,12 @@ export default async function HeatmapPage({
   const pages = (pagesData ?? []) as PageRow[];
 
   const selected = sp.page && pages.some((p) => p.page_path === sp.page) ? sp.page : pages[0]?.page_path;
-  const kind = sp.kind === "click" ? "click" : "move";
+  const kind = sp.kind === "click" ? "click" : sp.kind === "scroll" ? "scroll" : "move";
   const bg = sp.bg?.trim() || null;
   const dims = pages.find((p) => p.page_path === selected);
 
   let cells: HeatCell[] = [];
+  let scrollBuckets: ScrollBucket[] = [];
   if (selected) {
     const { data: cellData } = await supabase
       .from("heatmap_cell")
@@ -45,11 +47,12 @@ export default async function HeatmapPage({
       .eq("page_path", selected)
       .eq("kind", kind)
       .limit(8000);
-    cells = (cellData ?? []).map((c) => ({
-      x: c.grid_x as number,
-      y: c.grid_y as number,
-      w: Number(c.weight),
-    }));
+    const rows = cellData ?? [];
+    if (kind === "scroll") {
+      scrollBuckets = rows.map((c) => ({ row: c.grid_y as number, count: Number(c.weight) }));
+    } else {
+      cells = rows.map((c) => ({ x: c.grid_x as number, y: c.grid_y as number, w: Number(c.weight) }));
+    }
   }
 
   const linkFor = (patch: Record<string, string>) => {
@@ -93,6 +96,7 @@ export default async function HeatmapPage({
               <select name="kind" defaultValue={kind} className="rounded-lg border px-3 py-2">
                 <option value="move">Movimento do mouse</option>
                 <option value="click">Cliques</option>
+                <option value="scroll">Rolagem</option>
               </select>
             </label>
             <label className="flex flex-1 flex-col gap-1">
@@ -109,34 +113,47 @@ export default async function HeatmapPage({
             </button>
           </form>
 
-          {/* Abas rápidas movimento/click */}
+          {/* Abas rápidas */}
           <div className="flex gap-2 text-sm">
-            <a
-              href={linkFor({ kind: "move" })}
-              className={`rounded-lg px-3 py-1 ${kind === "move" ? "bg-neutral-900 text-white" : "border"}`}
-            >
-              Movimento
-            </a>
-            <a
-              href={linkFor({ kind: "click" })}
-              className={`rounded-lg px-3 py-1 ${kind === "click" ? "bg-neutral-900 text-white" : "border"}`}
-            >
-              Cliques
-            </a>
+            {(
+              [
+                ["move", "Movimento"],
+                ["click", "Cliques"],
+                ["scroll", "Rolagem"],
+              ] as const
+            ).map(([k, label]) => (
+              <a
+                key={k}
+                href={linkFor({ kind: k })}
+                className={`rounded-lg px-3 py-1 ${kind === k ? "bg-neutral-900 text-white" : "border"}`}
+              >
+                {label}
+              </a>
+            ))}
           </div>
 
-          <div className="text-xs text-neutral-500">
-            {cells.length > 0
-              ? `${cells.length} zonas com ${kind === "click" ? "cliques" : "movimento"} em ${selected}`
-              : `Sem ${kind === "click" ? "cliques" : "movimento"} registrados nesta página ainda.`}
-          </div>
-
-          <HeatmapCanvas
-            cells={cells}
-            pageWidth={dims?.width ?? 0}
-            pageHeight={dims?.height ?? 0}
-            bg={bg}
-          />
+          {kind === "scroll" ? (
+            <ScrollMap
+              buckets={scrollBuckets}
+              pageWidth={dims?.width ?? 0}
+              pageHeight={dims?.height ?? 0}
+              bg={bg}
+            />
+          ) : (
+            <>
+              <div className="text-xs text-neutral-500">
+                {cells.length > 0
+                  ? `${cells.length} zonas com ${kind === "click" ? "cliques" : "movimento"} em ${selected}`
+                  : `Sem ${kind === "click" ? "cliques" : "movimento"} registrados nesta página ainda.`}
+              </div>
+              <HeatmapCanvas
+                cells={cells}
+                pageWidth={dims?.width ?? 0}
+                pageHeight={dims?.height ?? 0}
+                bg={bg}
+              />
+            </>
+          )}
 
           <p className="text-xs text-neutral-400">
             Dica: para o mapa cair exatamente sobre o seu site, tire um print de{" "}

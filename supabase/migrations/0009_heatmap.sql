@@ -18,7 +18,7 @@ create table if not exists heatmap_page (
 create table if not exists heatmap_cell (
   tenant_id  uuid not null references tenant(id) on delete cascade,
   page_path  text not null,
-  kind       text not null check (kind in ('move', 'click')),
+  kind       text not null check (kind in ('move', 'click', 'scroll')),
   grid_x     int  not null,
   grid_y     int  not null,
   weight     bigint not null default 0,
@@ -44,7 +44,7 @@ set search_path = public
 as $$
 declare c jsonb;
 begin
-  if p_kind not in ('move', 'click') then
+  if p_kind not in ('move', 'click', 'scroll') then
     raise exception 'kind inválido: %', p_kind;
   end if;
   for c in select * from jsonb_array_elements(p_cells)
@@ -61,6 +61,7 @@ end;
 $$;
 
 revoke all on function increment_heatmap_cells(uuid, text, text, jsonb) from public;
+grant execute on function increment_heatmap_cells(uuid, text, text, jsonb) to service_role;
 
 -- ---------------------------------------------------------------------------
 -- RLS: leitura pelo dashboard (dentro dos tenants visíveis). Escrita é feita

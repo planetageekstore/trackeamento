@@ -1,27 +1,39 @@
 "use client";
 
-import Link from "next/link";
 import { use, useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
-type Status = "checking" | "idle" | "connecting" | "open" | "error";
+type Status = "checking" | "idle" | "connecting" | "error";
 
 const isConnected = (s: string) => s === "open" || s === "connected";
 
 export default function WhatsAppPage({ params }: { params: Promise<{ tenant: string }> }) {
   const { tenant } = use(params);
+  const router = useRouter();
   const [qr, setQr] = useState<string | null>(null);
   const [status, setStatus] = useState<Status>("checking");
 
-  // Ao abrir a página, consulta o estado real. Se a sessão já está salva na
-  // Uazapi, mostramos "conectado" sem pedir QR de novo.
+  const goToConversas = useCallback(() => {
+    router.replace(`/${tenant}/conversas`);
+  }, [router, tenant]);
+
+  // Ao abrir: se a sessão já está salva na Uazapi, vai direto pras conversas.
+  // Só mostra a tela de QR quando realmente não há conexão. `?reconnect=1`
+  // força a tela de QR para trocar de número.
   useEffect(() => {
+    const force =
+      typeof window !== "undefined" && new URLSearchParams(window.location.search).get("reconnect") === "1";
     let alive = true;
     (async () => {
       try {
         const res = await fetch(`/api/whatsapp/status?tenantId=${tenant}`);
         const data = (await res.json()) as { qr: string | null; state: string };
         if (!alive) return;
-        setStatus(isConnected(data.state) ? "open" : "idle");
+        if (isConnected(data.state) && !force) {
+          goToConversas();
+        } else {
+          setStatus("idle");
+        }
       } catch {
         if (alive) setStatus("idle");
       }
@@ -29,7 +41,7 @@ export default function WhatsAppPage({ params }: { params: Promise<{ tenant: str
     return () => {
       alive = false;
     };
-  }, [tenant]);
+  }, [tenant, goToConversas]);
 
   const connect = useCallback(async () => {
     setStatus("connecting");
@@ -43,13 +55,13 @@ export default function WhatsAppPage({ params }: { params: Promise<{ tenant: str
       if (!res.ok) throw new Error();
       const data = (await res.json()) as { qr: string | null; state: string };
       setQr(data.qr);
-      if (isConnected(data.state)) setStatus("open");
+      if (isConnected(data.state)) goToConversas();
     } catch {
       setStatus("error");
     }
-  }, [tenant]);
+  }, [tenant, goToConversas]);
 
-  // Enquanto conectando, faz polling do estado e atualiza o QR.
+  // Enquanto conectando, faz polling; ao conectar, vai pras conversas.
   useEffect(() => {
     if (status !== "connecting") return;
     const id = setInterval(async () => {
@@ -57,8 +69,8 @@ export default function WhatsAppPage({ params }: { params: Promise<{ tenant: str
         const res = await fetch(`/api/whatsapp/status?tenantId=${tenant}`);
         const data = (await res.json()) as { qr: string | null; state: string };
         if (isConnected(data.state)) {
-          setStatus("open");
-          setQr(null);
+          clearInterval(id);
+          goToConversas();
         } else if (data.qr) {
           setQr(data.qr);
         }
@@ -67,47 +79,19 @@ export default function WhatsAppPage({ params }: { params: Promise<{ tenant: str
       }
     }, 3000);
     return () => clearInterval(id);
-  }, [status, tenant]);
+  }, [status, tenant, goToConversas]);
 
   return (
     <main className="mx-auto max-w-md space-y-6 p-8">
-      <h1 className="text-xl font-semibold">WhatsApp</h1>
+      <h1 className="text-xl font-semibold">Conectar WhatsApp</h1>
 
-      {status === "checking" && (
+      {status === "checking" ? (
         <p className="text-sm text-neutral-500">Verificando conexão…</p>
-      )}
-
-      {status === "open" && (
-        <div className="space-y-4">
-          <p className="rounded bg-emerald-100 p-4 text-emerald-800">
-            ✓ WhatsApp conectado. A sessão fica salva — você não precisa escanear o QR de novo.
-          </p>
-          <Link
-            href={`/${tenant}/conversas`}
-            className="inline-block rounded bg-neutral-900 px-4 py-2 text-white"
-          >
-            Ver conversas
-          </Link>
-          <details className="text-sm text-neutral-500">
-            <summary className="cursor-pointer">Trocar de número / reconectar</summary>
-            <p className="mt-2">
-              Só use isto para conectar um número diferente — vai gerar um novo QR.
-            </p>
-            <button
-              onClick={connect}
-              className="mt-2 rounded border px-3 py-1.5 text-neutral-700 hover:bg-neutral-100"
-            >
-              Gerar novo QR
-            </button>
-          </details>
-        </div>
-      )}
-
-      {(status === "idle" || status === "connecting" || status === "error") && (
+      ) : (
         <>
           <p className="text-sm text-neutral-600">
-            Clique em conectar e escaneie o QR code com o WhatsApp (Aparelhos conectados → Conectar um
-            aparelho). É só na primeira vez — depois a sessão fica salva.
+            Escaneie o QR code com o WhatsApp (Aparelhos conectados → Conectar um aparelho). É só na
+            primeira vez — depois a sessão fica salva e você cai direto nas conversas.
           </p>
           <button onClick={connect} className="rounded bg-neutral-900 px-4 py-2 text-white">
             {status === "connecting" ? "Gerando QR..." : "Conectar / gerar QR"}

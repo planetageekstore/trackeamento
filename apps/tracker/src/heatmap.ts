@@ -23,6 +23,18 @@ export function initHeatmap(): void {
     const clicks: Grid = new Map();
     let lastSample = 0;
 
+    // Profundidade de rolagem: linha mais baixa que o visitante chegou a VER
+    // (base da viewport). Enviada 1x por visita para montar o mapa de scroll.
+    let maxSeenRow = 0;
+    let scrollSent = false;
+    const updateSeen = () => {
+      const bottom = window.scrollY + window.innerHeight;
+      const row = Math.floor(bottom / ROW_H);
+      if (row > maxSeenRow) maxSeenRow = row;
+    };
+    updateSeen();
+    window.addEventListener("scroll", updateSeen, { passive: true });
+
     const cellKey = (clientX: number, docY: number): string => {
       const w = Math.max(document.documentElement.clientWidth, 1);
       const col = Math.min(COLS - 1, Math.max(0, Math.floor((clientX / w) * COLS)));
@@ -52,8 +64,10 @@ export function initHeatmap(): void {
         return [Number(x), Number(y), v];
       });
 
-    const flush = (useBeacon: boolean) => {
-      if (moves.size === 0 && clicks.size === 0) return;
+    const flush = (terminal: boolean) => {
+      // A rolagem é contabilizada uma única vez por visita, no envio final.
+      const sendScroll = terminal && !scrollSent && maxSeenRow > 0;
+      if (moves.size === 0 && clicks.size === 0 && !sendScroll) return;
       const payload = {
         sk: siteKey,
         page: location.pathname,
@@ -61,13 +75,15 @@ export function initHeatmap(): void {
         h: document.documentElement.scrollHeight,
         moves: toArr(moves),
         clicks: toArr(clicks),
+        scroll: sendScroll ? maxSeenRow : undefined,
       };
+      if (sendScroll) scrollSent = true;
       moves.clear();
       clicks.clear();
       const url = `${apiBase}/api/heatmap`;
       const body = JSON.stringify(payload);
       try {
-        if (useBeacon && typeof navigator.sendBeacon === "function") {
+        if (terminal && typeof navigator.sendBeacon === "function") {
           navigator.sendBeacon(url, new Blob([body], { type: "application/json" }));
           return;
         }

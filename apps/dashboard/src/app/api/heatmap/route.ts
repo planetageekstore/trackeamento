@@ -62,6 +62,10 @@ export async function POST(req: NextRequest): Promise<Response> {
   const clicks = sanitizeCells(body.clicks);
   const w = Math.max(0, Math.min(Number(body.w) || 0, 20000));
   const h = Math.max(0, Math.min(Number(body.h) || 0, 200000));
+  // Rolagem: linha máxima vista na visita → 1 voto naquele nível de profundidade.
+  const scrollRow = Number(body.scroll);
+  const scroll: Cell[] =
+    Number.isFinite(scrollRow) && scrollRow > 0 ? [[0, Math.min(Math.floor(scrollRow), 100000), 1]] : [];
 
   try {
     const supabase = createSupabaseServiceClient();
@@ -85,6 +89,14 @@ export async function POST(req: NextRequest): Promise<Response> {
         p_page: page,
         p_kind: "click",
         p_cells: clicks,
+      });
+    }
+    if (scroll.length > 0) {
+      await supabase.rpc("increment_heatmap_cells", {
+        p_tenant: tenant.id,
+        p_page: page,
+        p_kind: "scroll",
+        p_cells: scroll,
       });
     }
   } catch (err) {
