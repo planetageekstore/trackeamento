@@ -6,6 +6,7 @@ import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { corsFor, jsonResponse, rateLimit } from "@/server/http";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic"; // rota sempre dinâmica (busta cache de build)
 const log = createLogger({ route: "api/identify" });
 
 export function OPTIONS(req: NextRequest): Response {
