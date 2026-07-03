@@ -133,6 +133,54 @@ export async function disconnectNuvemshop(tenantId: string): Promise<void> {
   await supabase.from("integration").delete().eq("tenant_id", tenantId).eq("provider", "nuvemshop");
 }
 
+interface NuvemshopCustomer {
+  name?: string;
+  email?: string;
+  phone?: string;
+  billing_phone?: string;
+  default_address?: { phone?: string };
+}
+
+/** Busca um cliente por ID (usado no identify a partir de window.LS.customer). */
+export async function fetchCustomer(
+  storeId: string | number,
+  token: string,
+  customerId: string | number,
+): Promise<{ name: string | null; email: string | null; phone: string | null } | null> {
+  const res = await api(storeId, token, `/customers/${customerId}`);
+  if (!res.ok) return null;
+  const c = (await res.json()) as NuvemshopCustomer;
+  return {
+    name: c.name ?? null,
+    email: c.email ?? null,
+    phone: c.phone ?? c.billing_phone ?? c.default_address?.phone ?? null,
+  };
+}
+
+/**
+ * Resolve nome/email/telefone de um cliente do Nuvemshop (por ID) usando o
+ * token salvo da integração do tenant. Retorna null se não houver integração.
+ */
+export async function resolveNuvemshopCustomer(
+  tenantId: string,
+  customerId: string | number,
+): Promise<{ name: string | null; email: string | null; phone: string | null } | null> {
+  const supabase = createSupabaseServiceClient();
+  const { data: integ } = await supabase
+    .from("integration")
+    .select("account_ref, access_token_enc")
+    .eq("tenant_id", tenantId)
+    .eq("provider", "nuvemshop")
+    .maybeSingle();
+  if (!integ?.account_ref || !integ.access_token_enc) return null;
+  try {
+    const token = await decryptSecret(integ.access_token_enc as string);
+    return await fetchCustomer(integ.account_ref as string, token, customerId);
+  } catch {
+    return null;
+  }
+}
+
 /** Busca uma venda para extrair nota/valor (usado no webhook). */
 export async function fetchOrder(
   storeId: string | number,

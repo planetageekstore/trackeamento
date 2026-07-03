@@ -62,7 +62,7 @@ declare global {
     // API global para checkout/e-commerce e eventos custom (FR-009).
     const identify = (traits: Traits) => {
       const cur = getStoredId();
-      if (cur && traits && (traits.name || traits.email || traits.phone)) {
+      if (cur && traits && (traits.name || traits.email || traits.phone || traits.nsCustomer)) {
         sendIdentify(apiBase, siteKey, cur, traits);
       }
     };

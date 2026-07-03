@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { createLogger } from "@trk/shared";
 import { resolveTenant } from "@/server/tenant";
+import { resolveNuvemshopCustomer } from "@/server/integrations/nuvemshop";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { corsFor, jsonResponse, rateLimit } from "@/server/http";
 
@@ -47,9 +48,24 @@ export async function POST(req: NextRequest): Promise<Response> {
   if (!tenant) return jsonResponse({ error: "unauthorized" }, 403, cors);
 
   const patch: Record<string, string> = {};
-  const name = clean(body.name, 120);
-  const email = clean(body.email, 200);
-  const phone = clean(body.phone, 40);
+  let name = clean(body.name, 120);
+  let email = clean(body.email, 200);
+  let phone = clean(body.phone, 40);
+
+  // ns_customer: ID do cliente logado (window.LS.customer). Resolve nome/email/
+  // telefone pela API do Nuvemshop quando não vieram no payload.
+  const nsCustomer =
+    body.ns_customer == null ? null : clean(String(body.ns_customer), 40);
+  if (nsCustomer && !(name && email && phone)) {
+    const c = await resolveNuvemshopCustomer(tenant.id, nsCustomer);
+    if (c) {
+      name = name ?? c.name;
+      email = email ?? c.email;
+      phone = phone ?? c.phone;
+    }
+    patch.external_id = nsCustomer;
+  }
+
   if (name) patch.name = name;
   if (email) patch.email = email;
   if (phone) patch.phone = phone;
