@@ -1,3 +1,4 @@
+// deploy nudge: libera /api/cron (sync-orders) como rota pública.
 import { type NextRequest, NextResponse } from "next/server";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 
