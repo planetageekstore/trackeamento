@@ -15,6 +15,7 @@ export async function ingestEvents(
   tenantId: string,
   trackingCode: string,
   events: TrackEventInput[],
+  session?: Record<string, string | null>,
 ): Promise<void> {
   const supabase = createSupabaseServiceClient();
 
@@ -30,6 +31,12 @@ export async function ingestEvents(
 
   if (leadErr || !lead) throw leadErr ?? new Error("falha ao upsert lead");
   const leadId = lead.id as string;
+
+  // 1b) Enriquecimento first-touch: grava dispositivo/geo só quando ainda vazio
+  // (device_type null). Visitas seguintes não sobrescrevem a primeira sessão.
+  if (session && Object.values(session).some(Boolean)) {
+    await supabase.from("lead").update(session).eq("id", leadId).is("device_type", null);
+  }
 
   for (const ev of events) {
     const utm = {

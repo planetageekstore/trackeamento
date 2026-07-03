@@ -10,7 +10,15 @@ interface LeadRow {
   phone: string | null;
   email: string | null;
   created_at: string;
+  device_type: string | null;
+  os: string | null;
+  browser: string | null;
+  city: string | null;
+  country: string | null;
 }
+
+const deviceIcon = (d: string | null) =>
+  d === "mobile" ? "📱" : d === "tablet" ? "📲" : d === "desktop" ? "💻" : "—";
 
 export default async function LeadsPage({ params }: { params: Promise<{ tenant: string }> }) {
   const { tenant } = await params;
@@ -20,7 +28,7 @@ export default async function LeadsPage({ params }: { params: Promise<{ tenant: 
   const supabase = await createSupabaseServerClient();
   const { data } = await supabase
     .from("lead")
-    .select("id, tracking_code, phone, email, created_at")
+    .select("id, tracking_code, phone, email, created_at, device_type, os, browser, city, country")
     .eq("tenant_id", tenant)
     .order("created_at", { ascending: false })
     .limit(100);
@@ -33,8 +41,9 @@ export default async function LeadsPage({ params }: { params: Promise<{ tenant: 
         <thead>
           <tr className="border-b text-left text-neutral-500">
             <th className="py-2">Tracking ID</th>
+            <th>Dispositivo</th>
+            <th>Local</th>
             <th>Telefone</th>
-            <th>E-mail</th>
             <th>Criado em</th>
           </tr>
         </thead>
@@ -46,14 +55,17 @@ export default async function LeadsPage({ params }: { params: Promise<{ tenant: 
                   {l.tracking_code}
                 </Link>
               </td>
+              <td>
+                {deviceIcon(l.device_type)} {[l.os, l.browser].filter(Boolean).join(" · ") || "—"}
+              </td>
+              <td>{[l.city, l.country].filter(Boolean).join(", ") || "—"}</td>
               <td>{l.phone ?? "—"}</td>
-              <td>{l.email ?? "—"}</td>
               <td>{new Date(l.created_at).toLocaleString("pt-BR")}</td>
             </tr>
           ))}
           {leads.length === 0 && (
             <tr>
-              <td colSpan={4} className="py-4 text-neutral-500">
+              <td colSpan={5} className="py-4 text-neutral-500">
                 Nenhum lead capturado ainda.
               </td>
             </tr>

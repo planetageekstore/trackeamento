@@ -36,9 +36,22 @@ declare global {
       storeOrigin(origin); // guarda a PRIMEIRA origem
     }
 
+    // Contexto do cliente para enriquecer o lead (tela/idioma/fuso). Dispositivo
+    // e geo são derivados no servidor (User-Agent + IP), não aqui.
+    let ctx: Record<string, string> = {};
+    try {
+      ctx = {
+        screen: `${screen.width}x${screen.height}`,
+        lang: navigator.language,
+        tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      };
+    } catch {
+      /* silencioso */
+    }
+
     // PAGE_VIEW assíncrono; envia a origem sempre — o servidor decide se há um
     // novo toque (click) a registrar (FR-023: nenhum toque descartado).
-    sendEvent(apiBase, siteKey, id, "PAGE_VIEW", { origin });
+    sendEvent(apiBase, siteKey, id, "PAGE_VIEW", { origin, data: { ctx } });
 
     // CHECKOUT quando o visitante entra numa página de checkout (FR-022).
     if (isCheckoutPage()) sendEvent(apiBase, siteKey, id, "CHECKOUT");

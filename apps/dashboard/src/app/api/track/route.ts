@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { schemas, createLogger } from "@trk/shared";
 import { resolveTenant } from "@/server/tenant";
 import { ingestEvents } from "@/server/ingest";
+import { buildLeadSession } from "@/server/session";
 import { corsFor, jsonResponse, rateLimit } from "@/server/http";
 
 export const runtime = "nodejs";
@@ -43,8 +44,14 @@ export async function POST(req: NextRequest): Promise<Response> {
     return jsonResponse({ error: "unauthorized" }, 403, cors);
   }
 
+  // Sessão first-touch: dispositivo (User-Agent) + geo (headers Vercel) +
+  // contexto do cliente (tela/idioma/fuso) que veio no PAGE_VIEW.
+  const pv = events.find((e) => e.type === "PAGE_VIEW");
+  const ctx = (pv?.data as { ctx?: { screen?: unknown; lang?: unknown; tz?: unknown } } | undefined)?.ctx;
+  const session = buildLeadSession(req, ctx);
+
   try {
-    await ingestEvents(tenant.id, trk, events);
+    await ingestEvents(tenant.id, trk, events, session);
   } catch (err) {
     // Falha interna não deve expor detalhes; loga e responde 202 para não
     // instruir o tracker a repetir de forma agressiva.

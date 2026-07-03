@@ -22,9 +22,24 @@ export default async function LeadDetailPage({
   const supabase = await createSupabaseServerClient();
   const { data: lead } = await supabase
     .from("lead")
-    .select("tracking_code, phone, email, created_at")
+    .select(
+      "tracking_code, phone, email, created_at, device_type, os, browser, screen, language, timezone, city, region, country",
+    )
     .eq("id", leadId)
     .maybeSingle();
+
+  const sessionRows: { label: string; value: string | null }[] = [
+    { label: "Dispositivo", value: lead?.device_type ?? null },
+    { label: "Sistema", value: lead?.os ?? null },
+    { label: "Navegador", value: lead?.browser ?? null },
+    { label: "Tela", value: lead?.screen ?? null },
+    { label: "Idioma", value: lead?.language ?? null },
+    { label: "Fuso", value: lead?.timezone ?? null },
+    {
+      label: "Local",
+      value: [lead?.city, lead?.region, lead?.country].filter(Boolean).join(", ") || null,
+    },
+  ].filter((r) => r.value);
 
   const [{ data: clicks }, { data: events }] = await Promise.all([
     supabase
@@ -75,6 +90,20 @@ export default async function LeadDetailPage({
           {lead?.phone ?? "sem telefone"} · {lead?.email ?? "sem e-mail"}
         </p>
       </div>
+
+      {sessionRows.length > 0 && (
+        <div className="rounded-lg border bg-white p-4">
+          <h2 className="mb-3 text-sm font-medium text-neutral-700">Sessão (primeiro acesso)</h2>
+          <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-3">
+            {sessionRows.map((r) => (
+              <div key={r.label}>
+                <dt className="text-xs text-neutral-400">{r.label}</dt>
+                <dd className="text-neutral-700">{r.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      )}
 
       <ol className="space-y-2">
         {journey.map((j, i) => (
