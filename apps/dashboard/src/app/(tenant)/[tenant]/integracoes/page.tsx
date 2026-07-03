@@ -2,7 +2,7 @@ import Link from "next/link";
 import { requireUser, assertTenantAccess } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { CopyBlock } from "@/components/CopyBlock";
-import { addDomain, removeDomain, disconnectIntegration } from "../actions";
+import { addDomain, removeDomain, disconnectIntegration, syncOrders } from "../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -163,6 +163,23 @@ export default async function IntegracoesPage({ params }: { params: Promise<{ te
           provider="google"
         />
       </section>
+
+      {/* Sincronizar vendas do Nuvemshop (fallback confiável do webhook) */}
+      {integ.get("nuvemshop") === "connected" && (
+        <section className="space-y-3 rounded-xl border bg-white p-5">
+          <h2 className="font-medium">Sincronizar vendas do Nuvemshop</h2>
+          <p className="text-sm text-neutral-600">
+            Busca os pedidos <b>pagos</b> dos últimos 30 dias e registra as vendas atribuídas aos
+            leads. Rode manualmente quando quiser — também roda sozinho de tempos em tempos.
+          </p>
+          <form action={syncOrders}>
+            <input type="hidden" name="tenantId" value={tenant} />
+            <button className="rounded-lg bg-neutral-900 px-4 py-2 text-sm text-white">
+              Sincronizar vendas agora
+            </button>
+          </form>
+        </section>
+      )}
     </main>
   );
 }
