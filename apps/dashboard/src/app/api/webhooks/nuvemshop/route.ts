@@ -7,6 +7,7 @@ import { enqueueDispatch } from "@/server/worker";
 import { extractTrackingCode, createLogger } from "@trk/shared";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 const log = createLogger({ route: "webhooks/nuvemshop" });
 
 function validHmac(raw: string, header: string | null, secret: string | null): boolean {
@@ -72,21 +73,44 @@ export async function POST(req: Request): Promise<Response> {
     const trk = extractTrackingCode(note);
     const value = order?.total ? Number(order.total) : null;
 
+    // Dados do comprador (do pedido ou do cadastro do cliente).
+    const buyerName = order?.contact_name ?? order?.customer?.name ?? null;
+    const buyerEmail = order?.contact_email ?? order?.customer?.email ?? null;
+    const buyerPhone = order?.contact_phone ?? order?.customer?.phone ?? null;
+    const customerId = order?.customer?.id != null ? String(order.customer.id) : null;
+
+    // Atribuição em cascata: TRK na nota → ID do cliente (external_id) → email.
+    // Assim a venda liga ao lead mesmo sem o TRK no pedido, desde que o
+    // comprador tenha se identificado (login) ou usado o mesmo e-mail.
     let leadId: string | null = null;
     let attributed = false;
-    if (trk) {
-      const { data: lead } = await supabase
+
+    const findLead = async (column: string, val: string) => {
+      const { data } = await supabase
         .from("lead")
         .select("id")
         .eq("tenant_id", tenantId)
-        .eq("tracking_code", trk)
+        .eq(column, val)
+        .order("created_at", { ascending: false })
+        .limit(1)
         .maybeSingle();
-      if (lead) {
-        leadId = lead.id as string;
-        attributed = true;
-        if (order?.contact_email) {
-          await supabase.from("lead").update({ email: order.contact_email }).eq("id", leadId).is("email", null);
-        }
+      return (data?.id as string | undefined) ?? null;
+    };
+
+    if (trk) leadId = await findLead("tracking_code", trk);
+    if (!leadId && customerId) leadId = await findLead("external_id", customerId);
+    if (!leadId && buyerEmail) leadId = await findLead("email", buyerEmail);
+    attributed = Boolean(leadId);
+
+    // Preenche o comprador no lead (só campos vazios; não sobrescreve).
+    if (leadId) {
+      const fill: Record<string, string> = {};
+      if (buyerName) fill.name = buyerName;
+      if (buyerEmail) fill.email = buyerEmail;
+      if (buyerPhone) fill.phone = buyerPhone;
+      if (customerId) fill.external_id = customerId;
+      for (const [col, v] of Object.entries(fill)) {
+        await supabase.from("lead").update({ [col]: v }).eq("id", leadId).is(col, null);
       }
     }
 

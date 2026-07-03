@@ -181,13 +181,23 @@ export async function resolveNuvemshopCustomer(
   }
 }
 
-/** Busca uma venda para extrair nota/valor (usado no webhook). */
+export interface NuvemshopOrder {
+  note?: string;
+  total?: string;
+  currency?: string;
+  contact_name?: string;
+  contact_email?: string;
+  contact_phone?: string;
+  customer?: { id?: number | string; name?: string; email?: string; phone?: string };
+}
+
+/** Busca uma venda para extrair nota/valor + dados do comprador (webhook). */
 export async function fetchOrder(
   storeId: string | number,
   token: string,
   orderId: string | number,
-): Promise<{ note?: string; total?: string; currency?: string; contact_email?: string } | null> {
+): Promise<NuvemshopOrder | null> {
   const res = await api(storeId, token, `/orders/${orderId}`);
   if (!res.ok) return null;
-  return (await res.json()) as { note?: string; total?: string; currency?: string; contact_email?: string };
+  return (await res.json()) as NuvemshopOrder;
 }
