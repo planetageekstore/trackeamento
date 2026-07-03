@@ -9,6 +9,7 @@ import { getSiteKey, getApiBase } from "./loader";
 import { sendEvent, type BrowserEventType } from "./api";
 import { interceptWhatsApp } from "./whatsapp";
 import { isCheckoutPage } from "./checkout";
+import { initHeatmap } from "./heatmap";
 
 declare global {
   interface Window {
@@ -82,6 +83,9 @@ declare global {
       };
     }
     window.addEventListener("popstate", onRouteChange);
+
+    // Mapa de calor: coleta agregada e leve de movimento/click (1 envio por visita).
+    initHeatmap();
   } catch {
     /* silencioso por design (FR-006 / Princípio III) */
   }
