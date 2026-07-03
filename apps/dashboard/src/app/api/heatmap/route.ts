@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { createLogger } from "@trk/shared";
 import { resolveTenant } from "@/server/tenant";
+import { parseUserAgent } from "@/server/session";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { corsFor, jsonResponse, rateLimit } from "@/server/http";
 
@@ -68,38 +69,37 @@ export async function POST(req: NextRequest): Promise<Response> {
   const scroll: Cell[] =
     Number.isFinite(scrollRow) && scrollRow > 0 ? [[0, Math.min(Math.floor(scrollRow), 100000), 1]] : [];
 
+  // Dispositivo binário (desktop | mobile) derivado do User-Agent; tablet vai
+  // para "mobile". Separa os mapas por tipo de tela.
+  const dt = parseUserAgent(req.headers.get("user-agent")).device_type;
+  const device = dt === "mobile" || dt === "tablet" ? "mobile" : "desktop";
+
   try {
     const supabase = createSupabaseServiceClient();
     await supabase
       .from("heatmap_page")
       .upsert(
-        { tenant_id: tenant.id, page_path: page, width: w, height: h, updated_at: new Date().toISOString() },
-        { onConflict: "tenant_id,page_path" },
+        {
+          tenant_id: tenant.id,
+          page_path: page,
+          device,
+          width: w,
+          height: h,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "tenant_id,page_path,device" },
       );
-    if (moves.length > 0) {
-      await supabase.rpc("increment_heatmap_cells", {
+    const inc = (kind: string, cells: Cell[]) =>
+      supabase.rpc("increment_heatmap_cells", {
         p_tenant: tenant.id,
         p_page: page,
-        p_kind: "move",
-        p_cells: moves,
+        p_device: device,
+        p_kind: kind,
+        p_cells: cells,
       });
-    }
-    if (clicks.length > 0) {
-      await supabase.rpc("increment_heatmap_cells", {
-        p_tenant: tenant.id,
-        p_page: page,
-        p_kind: "click",
-        p_cells: clicks,
-      });
-    }
-    if (scroll.length > 0) {
-      await supabase.rpc("increment_heatmap_cells", {
-        p_tenant: tenant.id,
-        p_page: page,
-        p_kind: "scroll",
-        p_cells: scroll,
-      });
-    }
+    if (moves.length > 0) await inc("move", moves);
+    if (clicks.length > 0) await inc("click", clicks);
+    if (scroll.length > 0) await inc("scroll", scroll);
   } catch (err) {
     log.error("falha ao gravar heatmap", { err: String(err), tenant: tenant.id });
   }

@@ -16,7 +16,7 @@ export default async function HeatmapPage({
   searchParams,
 }: {
   params: Promise<{ tenant: string }>;
-  searchParams: Promise<{ page?: string; kind?: string; bg?: string }>;
+  searchParams: Promise<{ page?: string; kind?: string; bg?: string; dev?: string }>;
 }) {
   const { tenant } = await params;
   const sp = await searchParams;
@@ -25,10 +25,13 @@ export default async function HeatmapPage({
 
   const supabase = await createSupabaseServerClient();
 
+  const device = sp.dev === "mobile" ? "mobile" : "desktop";
+
   const { data: pagesData } = await supabase
     .from("heatmap_page")
     .select("page_path, width, height")
     .eq("tenant_id", tenant)
+    .eq("device", device)
     .order("updated_at", { ascending: false });
   const pages = (pagesData ?? []) as PageRow[];
 
@@ -47,7 +50,8 @@ export default async function HeatmapPage({
     .limit(1)
     .maybeSingle();
   const domain = (domainRow?.domain as string | undefined) ?? null;
-  const shotW = Math.min(Math.max(dims?.width ?? 1280, 360), 1440);
+  const defaultW = device === "mobile" ? 390 : 1280;
+  const shotW = Math.min(Math.max(dims?.width || defaultW, 360), 1440);
   const autoBg =
     domain && selected
       ? `https://image.thum.io/get/fullpage/width/${shotW}/noanimate/https://${domain}${selected}`
@@ -63,6 +67,7 @@ export default async function HeatmapPage({
       .select("grid_x, grid_y, weight")
       .eq("tenant_id", tenant)
       .eq("page_path", selected)
+      .eq("device", device)
       .eq("kind", kind)
       .limit(8000);
     const rows = cellData ?? [];
@@ -77,7 +82,8 @@ export default async function HeatmapPage({
     const q = new URLSearchParams();
     if (selected) q.set("page", patch.page ?? selected);
     q.set("kind", patch.kind ?? kind);
-    if (patch.bg ?? bg) q.set("bg", patch.bg ?? bg ?? "");
+    q.set("dev", patch.dev ?? device);
+    if (sp.bg) q.set("bg", patch.bg ?? sp.bg);
     return `?${q.toString()}`;
   };
 
@@ -91,15 +97,36 @@ export default async function HeatmapPage({
         </p>
       </div>
 
+      {/* Dispositivo: soma só as sessões daquele tipo de tela */}
+      <div className="flex gap-3">
+        {(
+          [
+            ["desktop", "💻", "Desktop"],
+            ["mobile", "📱", "Mobile"],
+          ] as const
+        ).map(([d, icon, label]) => (
+          <a
+            key={d}
+            href={linkFor({ dev: d })}
+            className={`flex items-center gap-2 rounded-xl border px-5 py-3 text-sm font-medium ${
+              device === d ? "border-neutral-900 bg-neutral-900 text-white" : "bg-white text-neutral-600 hover:bg-neutral-50"
+            }`}
+          >
+            <span className="text-lg">{icon}</span> {label}
+          </a>
+        ))}
+      </div>
+
       {pages.length === 0 ? (
         <div className="rounded-lg border bg-white p-6 text-sm text-neutral-500">
-          Ainda não há dados de calor. Assim que os visitantes navegarem no site com o tracker
-          instalado, as páginas aparecem aqui automaticamente.
+          Ainda não há dados de calor em <b>{device === "mobile" ? "mobile" : "desktop"}</b>. Assim
+          que os visitantes navegarem nesse tipo de dispositivo, as páginas aparecem aqui.
         </div>
       ) : (
         <>
           {/* Controles */}
           <form className="flex flex-wrap items-end gap-3 rounded-lg border bg-white p-4 text-sm">
+            <input type="hidden" name="dev" value={device} />
             <label className="flex flex-col gap-1">
               <span className="text-xs text-neutral-500">Página</span>
               <select name="page" defaultValue={selected} className="rounded-lg border px-3 py-2">
