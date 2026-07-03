@@ -34,8 +34,26 @@ export default async function HeatmapPage({
 
   const selected = sp.page && pages.some((p) => p.page_path === sp.page) ? sp.page : pages[0]?.page_path;
   const kind = sp.kind === "click" ? "click" : sp.kind === "scroll" ? "scroll" : "move";
-  const bg = sp.bg?.trim() || null;
   const dims = pages.find((p) => p.page_path === selected);
+
+  // Fundo do mapa: screenshot de página inteira gerado automaticamente pela URL
+  // (domínio do tenant + rota). Capturado no MESMO width da página registrada,
+  // para o layout alinhar com as manchas. Campo `bg` permite sobrescrever.
+  const { data: domainRow } = await supabase
+    .from("tenant_domain")
+    .select("domain")
+    .eq("tenant_id", tenant)
+    .order("domain")
+    .limit(1)
+    .maybeSingle();
+  const domain = (domainRow?.domain as string | undefined) ?? null;
+  const shotW = Math.min(Math.max(dims?.width ?? 1280, 360), 1440);
+  const autoBg =
+    domain && selected
+      ? `https://image.thum.io/get/fullpage/width/${shotW}/noanimate/https://${domain}${selected}`
+      : null;
+  const bgOff = sp.bg === "off"; // permite desligar o fundo
+  const bg = bgOff ? null : sp.bg?.trim() || autoBg;
 
   let cells: HeatCell[] = [];
   let scrollBuckets: ScrollBucket[] = [];
@@ -68,7 +86,8 @@ export default async function HeatmapPage({
       <div>
         <h1 className="text-xl font-semibold">Mapa de calor</h1>
         <p className="text-sm text-neutral-500">
-          Onde os visitantes mais passam o mouse (agregado e anônimo). Quente = mais interesse.
+          Soma de todas as sessões (anônimo) sobre o layout do site. Quente = mais mouse/cliques.
+          O fundo é gerado automaticamente; na 1ª vez de cada página pode levar alguns segundos.
         </p>
       </div>
 
@@ -100,11 +119,11 @@ export default async function HeatmapPage({
               </select>
             </label>
             <label className="flex flex-1 flex-col gap-1">
-              <span className="text-xs text-neutral-500">Screenshot da página (URL, opcional)</span>
+              <span className="text-xs text-neutral-500">Fundo do site (automático)</span>
               <input
                 name="bg"
-                defaultValue={bg ?? ""}
-                placeholder="https://... (print de página inteira p/ alinhar o mapa)"
+                defaultValue={sp.bg && sp.bg !== "off" ? sp.bg : ""}
+                placeholder="gerado automático — cole uma URL de imagem p/ trocar, ou 'off' p/ ocultar"
                 className="rounded-lg border px-3 py-2"
               />
             </label>

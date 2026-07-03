@@ -95,11 +95,12 @@ export function HeatmapCanvas({
         d[i - 3] = palette[off] ?? 0;
         d[i - 2] = palette[off + 1] ?? 0;
         d[i - 1] = palette[off + 2] ?? 0;
-        d[i] = Math.min(a + 40, 220); // opacidade final controlada
+        // Translúcido: deixa o layout do site aparecer por baixo das manchas.
+        d[i] = Math.min(Math.round(a * 0.72), bg ? 165 : 210);
       }
     }
     ctx.putImageData(img, 0, 0);
-  }, [cells, pageWidth, pageHeight]);
+  }, [cells, pageWidth, pageHeight, bg]);
 
   return (
     <div className="relative w-full overflow-hidden rounded-lg border bg-neutral-100">
