@@ -57,7 +57,29 @@ declare global {
     sendEvent(apiBase, siteKey, id, "PAGE_VIEW", { origin, data: { ctx } });
 
     // CHECKOUT quando o visitante entra numa página de checkout (FR-022).
-    if (isCheckoutPage()) sendEvent(apiBase, siteKey, id, "CHECKOUT");
+    // Dispara no MÁXIMO 1x por sessão: o tracker pode ser carregado várias vezes
+    // no checkout (Partner Script + Códigos de conversão + GTM). Trava dupla:
+    // flag no window (mesma página) + sessionStorage (entre páginas da sessão).
+    if (isCheckoutPage()) {
+      const w = window as unknown as { __trkCheckoutFired?: boolean };
+      let fired = w.__trkCheckoutFired === true;
+      if (!fired) {
+        try {
+          fired = sessionStorage.getItem("_trk_co") === "1";
+        } catch {
+          /* sessionStorage indisponível: cai na trava do window */
+        }
+      }
+      if (!fired) {
+        w.__trkCheckoutFired = true;
+        try {
+          sessionStorage.setItem("_trk_co", "1");
+        } catch {
+          /* ignore */
+        }
+        sendEvent(apiBase, siteKey, id, "CHECKOUT");
+      }
+    }
 
     // API global para checkout/e-commerce e eventos custom (FR-009).
     const identify = (traits: Traits) => {
