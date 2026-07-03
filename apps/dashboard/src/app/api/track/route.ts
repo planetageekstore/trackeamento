@@ -2,14 +2,14 @@ import type { NextRequest } from "next/server";
 import { schemas, createLogger } from "@trk/shared";
 import { resolveTenant } from "@/server/tenant";
 import { ingestEvents } from "@/server/ingest";
-import { corsHeaders, jsonResponse, rateLimit } from "@/server/http";
+import { corsFor, jsonResponse, rateLimit } from "@/server/http";
 
 export const runtime = "nodejs";
 const log = createLogger({ route: "api/track" });
 
 /** Preflight CORS (fetch fallback do tracker). */
-export function OPTIONS(): Response {
-  return new Response(null, { status: 204, headers: corsHeaders });
+export function OPTIONS(req: NextRequest): Response {
+  return new Response(null, { status: 204, headers: corsFor(req.headers.get("origin")) });
 }
 
 /**
@@ -18,28 +18,29 @@ export function OPTIONS(): Response {
  * Nunca retorna erro que quebre o tracker (o tracker ignora respostas ≠ 2xx).
  */
 export async function POST(req: NextRequest): Promise<Response> {
+  const cors = req.headers.get("origin");
   let raw: unknown;
   try {
     raw = await req.json();
   } catch {
-    return jsonResponse({ error: "invalid_json" }, 400);
+    return jsonResponse({ error: "invalid_json" }, 400, cors);
   }
 
   const parsed = schemas.trackPayloadSchema.safeParse(raw);
   if (!parsed.success) {
-    return jsonResponse({ error: "invalid_payload" }, 400);
+    return jsonResponse({ error: "invalid_payload" }, 400, cors);
   }
   const { sk, trk, events } = parsed.data;
 
   const origin = req.headers.get("origin") ?? req.headers.get("referer");
   const ip = req.headers.get("x-forwarded-for") ?? "unknown";
   if (!rateLimit(`${sk}:${ip}`)) {
-    return jsonResponse({ error: "rate_limited" }, 429);
+    return jsonResponse({ error: "rate_limited" }, 429, cors);
   }
 
   const tenant = await resolveTenant(sk, origin);
   if (!tenant) {
-    return jsonResponse({ error: "unauthorized" }, 403);
+    return jsonResponse({ error: "unauthorized" }, 403, cors);
   }
 
   try {
@@ -50,5 +51,5 @@ export async function POST(req: NextRequest): Promise<Response> {
     log.error("falha na ingestão", { err: String(err), tenant: tenant.id });
   }
 
-  return jsonResponse({ ok: true }, 202);
+  return jsonResponse({ ok: true }, 202, cors);
 }

@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import { createLogger } from "@trk/shared";
 import { resolveTenant } from "@/server/tenant";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
-import { corsHeaders, jsonResponse, rateLimit } from "@/server/http";
+import { corsFor, jsonResponse, rateLimit } from "@/server/http";
 
 export const runtime = "nodejs";
 const log = createLogger({ route: "api/heatmap" });
@@ -10,8 +10,8 @@ const log = createLogger({ route: "api/heatmap" });
 const MAX_CELLS = 4000; // teto defensivo por requisição
 
 /** Preflight CORS (o tracker usa fetch como fallback do sendBeacon). */
-export function OPTIONS(): Response {
-  return new Response(null, { status: 204, headers: corsHeaders });
+export function OPTIONS(req: NextRequest): Response {
+  return new Response(null, { status: 204, headers: corsFor(req.headers.get("origin")) });
 }
 
 type Cell = [number, number, number];
@@ -38,25 +38,26 @@ function sanitizeCells(v: unknown): Cell[] {
  * Sem TRK, sem vínculo com lead. Responde 202 sem vazar detalhes.
  */
 export async function POST(req: NextRequest): Promise<Response> {
+  const cors = req.headers.get("origin");
   let raw: unknown;
   try {
     raw = await req.json();
   } catch {
-    return jsonResponse({ error: "invalid_json" }, 400);
+    return jsonResponse({ error: "invalid_json" }, 400, cors);
   }
 
   const body = (raw ?? {}) as Record<string, unknown>;
   const sk = typeof body.sk === "string" ? body.sk : "";
   let page = typeof body.page === "string" ? body.page : "";
-  if (!sk || !page) return jsonResponse({ error: "invalid_payload" }, 400);
+  if (!sk || !page) return jsonResponse({ error: "invalid_payload" }, 400, cors);
   page = page.slice(0, 512); // limita cardinalidade/tamanho
 
   const origin = req.headers.get("origin") ?? req.headers.get("referer");
   const ip = req.headers.get("x-forwarded-for") ?? "unknown";
-  if (!rateLimit(`hm:${sk}:${ip}`)) return jsonResponse({ error: "rate_limited" }, 429);
+  if (!rateLimit(`hm:${sk}:${ip}`)) return jsonResponse({ error: "rate_limited" }, 429, cors);
 
   const tenant = await resolveTenant(sk, origin);
-  if (!tenant) return jsonResponse({ error: "unauthorized" }, 403);
+  if (!tenant) return jsonResponse({ error: "unauthorized" }, 403, cors);
 
   const moves = sanitizeCells(body.moves);
   const clicks = sanitizeCells(body.clicks);
@@ -103,5 +104,5 @@ export async function POST(req: NextRequest): Promise<Response> {
     log.error("falha ao gravar heatmap", { err: String(err), tenant: tenant.id });
   }
 
-  return jsonResponse({ ok: true }, 202);
+  return jsonResponse({ ok: true }, 202, cors);
 }

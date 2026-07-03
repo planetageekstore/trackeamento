@@ -1,17 +1,39 @@
 import "server-only";
 
-/** Cabeçalhos CORS para o endpoint público de ingestão (tracker cross-origin). */
-export const corsHeaders: Record<string, string> = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
-  "Access-Control-Allow-Headers": "content-type",
-  "Access-Control-Max-Age": "86400",
-};
+/**
+ * Cabeçalhos CORS do endpoint público de ingestão (tracker cross-origin).
+ *
+ * O `sendBeacon` envia em modo de credenciais "include"; nesse caso o navegador
+ * NÃO aceita o curinga `*` — a resposta precisa refletir a origem exata e
+ * declarar `Allow-Credentials: true`. É seguro aqui: a ingestão valida por
+ * site-key + allowlist de domínio com service role e ignora cookies.
+ */
+export function corsFor(origin: string | null): Record<string, string> {
+  if (origin) {
+    return {
+      "Access-Control-Allow-Origin": origin,
+      "Access-Control-Allow-Credentials": "true",
+      "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+      "Access-Control-Allow-Headers": "content-type",
+      "Access-Control-Max-Age": "86400",
+      Vary: "Origin",
+    };
+  }
+  return {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+    "Access-Control-Allow-Headers": "content-type",
+    "Access-Control-Max-Age": "86400",
+  };
+}
 
-export function jsonResponse(body: unknown, status: number): Response {
+/** Compat: cabeçalhos estáticos (sem credenciais). Prefira `corsFor(origin)`. */
+export const corsHeaders = corsFor(null);
+
+export function jsonResponse(body: unknown, status: number, origin: string | null = null): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "content-type": "application/json", ...corsHeaders },
+    headers: { "content-type": "application/json", ...corsFor(origin) },
   });
 }
 
