@@ -5,7 +5,7 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr";
  * Middleware: mantém a sessão do Supabase atualizada e protege rotas do painel.
  * Rotas públicas: /login, /auth/*, /api/track, /api/heatmap e /api/webhooks/* (ingestão).
  */
-const PUBLIC_PATHS = ["/login", "/auth", "/api/track", "/api/heatmap", "/api/webhooks", "/api/oauth"];
+const PUBLIC_PATHS = ["/login", "/auth", "/api/track", "/api/heatmap", "/api/identify", "/api/webhooks", "/api/oauth"];
 
 export async function middleware(request: NextRequest) {
   const response = NextResponse.next({ request });

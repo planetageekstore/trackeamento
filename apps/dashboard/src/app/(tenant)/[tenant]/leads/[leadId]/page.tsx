@@ -23,7 +23,7 @@ export default async function LeadDetailPage({
   const { data: lead } = await supabase
     .from("lead")
     .select(
-      "tracking_code, phone, email, created_at, device_type, os, browser, screen, language, timezone, city, region, country",
+      "tracking_code, name, phone, email, created_at, device_type, os, browser, screen, language, timezone, city, region, country",
     )
     .eq("id", leadId)
     .maybeSingle();
@@ -86,6 +86,7 @@ export default async function LeadDetailPage({
     <main className="mx-auto max-w-3xl space-y-6 p-8">
       <div>
         <h1 className="font-mono text-lg font-semibold">{lead?.tracking_code ?? "Lead"}</h1>
+        {lead?.name && <p className="text-sm font-medium text-neutral-800">{lead.name}</p>}
         <p className="text-sm text-neutral-500">
           {lead?.phone ?? "sem telefone"} · {lead?.email ?? "sem e-mail"}
         </p>

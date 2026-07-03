@@ -12,6 +12,36 @@ interface SendOptions {
  * Usa `sendBeacon` (não bloqueia unload/navegação); fallback para `fetch keepalive`.
  * Qualquer erro é engolido — o site do cliente nunca quebra.
  */
+export interface Traits {
+  name?: string;
+  email?: string;
+  phone?: string;
+}
+
+/** Associa dados de contato informados pelo cliente ao lead (POST /api/identify). */
+export function sendIdentify(apiBase: string, siteKey: string, trk: string, traits: Traits): void {
+  try {
+    const body = JSON.stringify({ sk: siteKey, trk, ...traits });
+    const url = `${apiBase}/api/identify`;
+    if (typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
+      const ok = navigator.sendBeacon(url, new Blob([body], { type: "application/json" }));
+      if (ok) return;
+    }
+    void fetch(url, {
+      method: "POST",
+      body,
+      headers: { "content-type": "application/json" },
+      keepalive: true,
+      mode: "cors",
+      credentials: "omit",
+    }).catch(() => {
+      /* silencioso */
+    });
+  } catch {
+    /* silencioso por design (FR-006) */
+  }
+}
+
 export function sendEvent(
   apiBase: string,
   siteKey: string,

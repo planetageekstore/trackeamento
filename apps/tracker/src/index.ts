@@ -6,7 +6,7 @@ import { generateTrackingCode } from "@trk/shared/trk";
 import { parseOrigin } from "./parseUrl";
 import { getStoredId, storeId, storeOrigin } from "./storage";
 import { getSiteKey, getApiBase } from "./loader";
-import { sendEvent, type BrowserEventType } from "./api";
+import { sendEvent, sendIdentify, type BrowserEventType, type Traits } from "./api";
 import { interceptWhatsApp } from "./whatsapp";
 import { isCheckoutPage } from "./checkout";
 import { initHeatmap } from "./heatmap";
@@ -16,7 +16,10 @@ declare global {
     _saasTrk?: {
       getId(): string | null;
       track(type: BrowserEventType, data?: Record<string, unknown>): void;
+      identify(traits: Traits): void;
     };
+    /** A loja pode preencher isto (ex.: página de confirmação) antes do tracker carregar. */
+    __trkIdentify?: Traits;
   }
 }
 
@@ -57,13 +60,24 @@ declare global {
     if (isCheckoutPage()) sendEvent(apiBase, siteKey, id, "CHECKOUT");
 
     // API global para checkout/e-commerce e eventos custom (FR-009).
+    const identify = (traits: Traits) => {
+      const cur = getStoredId();
+      if (cur && traits && (traits.name || traits.email || traits.phone)) {
+        sendIdentify(apiBase, siteKey, cur, traits);
+      }
+    };
     window._saasTrk = {
       getId: () => getStoredId(),
       track: (type, data) => {
         const cur = getStoredId();
         if (cur) sendEvent(apiBase, siteKey, cur, type, { data });
       },
+      identify,
     };
+
+    // Drena dados que a loja possa ter setado antes do tracker carregar
+    // (ex.: página de confirmação define window.__trkIdentify com o pedido).
+    if (window.__trkIdentify) identify(window.__trkIdentify);
 
     // Intercepta botões de WhatsApp: anexa o marcador e emite WHATSAPP_CLICK (US2).
     interceptWhatsApp(id, () => {
