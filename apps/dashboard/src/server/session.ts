@@ -14,6 +14,14 @@ export interface LeadSession {
   city: string | null;
 }
 
+const BOT_RE =
+  /bot\b|crawl|spider|headless|phantom|puppeteer|playwright|prerender|screenshot|thum\.io|thumbio|slurp|lighthouse|pagespeed|facebookexternalhit|whatsapp|telegram|discord|preview|monitor|uptime|pingdom|curl|wget|python-requests|axios|node-fetch/i;
+
+/** Heurística: User-Agent é de bot / navegador headless / gerador de screenshot. */
+export function isBot(ua: string | null): boolean {
+  return !!ua && BOT_RE.test(ua);
+}
+
 /** Deriva dispositivo/sistema/navegador de um User-Agent (sem dependências). */
 export function parseUserAgent(ua: string | null): { device_type: string | null; os: string | null; browser: string | null } {
   if (!ua) return { device_type: null, os: null, browser: null };

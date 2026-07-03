@@ -25,6 +25,12 @@ declare global {
 
 (function () {
   try {
+    // Não rastreia quando a página é aberta pelo gerador de screenshot do mapa
+    // de calor (thum.io etc.) — evita leads/heatmap falsos. Também ignora
+    // navegadores headless óbvios (bots de renderização).
+    const nav = navigator as Navigator & { webdriver?: boolean };
+    if (location.search.indexOf("_trkshot") >= 0 || nav.webdriver === true) return;
+
     const siteKey = getSiteKey();
     if (!siteKey) return; // sem site key não há como identificar o tenant
 

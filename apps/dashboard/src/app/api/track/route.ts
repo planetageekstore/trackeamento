@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import { schemas, createLogger } from "@trk/shared";
 import { resolveTenant } from "@/server/tenant";
 import { ingestEvents } from "@/server/ingest";
-import { buildLeadSession } from "@/server/session";
+import { buildLeadSession, isBot } from "@/server/session";
 import { corsFor, jsonResponse, rateLimit } from "@/server/http";
 
 export const runtime = "nodejs";
@@ -20,6 +20,8 @@ export function OPTIONS(req: NextRequest): Response {
  */
 export async function POST(req: NextRequest): Promise<Response> {
   const cors = req.headers.get("origin");
+  // Ignora bots / navegadores headless / geradores de screenshot (não vira lead).
+  if (isBot(req.headers.get("user-agent"))) return jsonResponse({ ok: true }, 202, cors);
   let raw: unknown;
   try {
     raw = await req.json();

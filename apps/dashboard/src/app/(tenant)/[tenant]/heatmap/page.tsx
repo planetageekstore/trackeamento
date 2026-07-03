@@ -52,9 +52,14 @@ export default async function HeatmapPage({
   const domain = (domainRow?.domain as string | undefined) ?? null;
   const defaultW = device === "mobile" ? 390 : 1280;
   const shotW = Math.min(Math.max(dims?.width || defaultW, 360), 1440);
+  // `_trkshot=1` faz o tracker do site NÃO contar esse acesso (o screenshot é
+  // renderizado num datacenter e viraria lead falso — ex.: Ashburn/thum.io).
+  const shotTarget = selected
+    ? `https://${domain}${selected}${selected.includes("?") ? "&" : "?"}_trkshot=1`
+    : null;
   const autoBg =
-    domain && selected
-      ? `https://image.thum.io/get/fullpage/width/${shotW}/noanimate/https://${domain}${selected}`
+    domain && shotTarget
+      ? `https://image.thum.io/get/fullpage/width/${shotW}/noanimate/${shotTarget}`
       : null;
   const bgOff = sp.bg === "off"; // permite desligar o fundo
   const bg = bgOff ? null : sp.bg?.trim() || autoBg;

@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { createLogger } from "@trk/shared";
 import { resolveTenant } from "@/server/tenant";
-import { parseUserAgent } from "@/server/session";
+import { parseUserAgent, isBot } from "@/server/session";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { corsFor, jsonResponse, rateLimit } from "@/server/http";
 
@@ -40,6 +40,7 @@ function sanitizeCells(v: unknown): Cell[] {
  */
 export async function POST(req: NextRequest): Promise<Response> {
   const cors = req.headers.get("origin");
+  if (isBot(req.headers.get("user-agent"))) return jsonResponse({ ok: true }, 202, cors);
   let raw: unknown;
   try {
     raw = await req.json();
