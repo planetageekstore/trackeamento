@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireUser, assertTenantAccess } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { fmtDateTime } from "@/lib/date";
 
 export const dynamic = "force-dynamic";
 
@@ -67,7 +68,7 @@ export default async function ConversionsPage({
               <td className="font-mono text-xs">{r.lead?.tracking_code ?? "—"}</td>
               <td>{r.value != null ? `${r.currency} ${r.value}` : "—"}</td>
               <td>{r.attributed ? "✓" : "—"}</td>
-              <td>{new Date(r.occurred_at).toLocaleString("pt-BR")}</td>
+              <td>{fmtDateTime(r.occurred_at)}</td>
             </tr>
           ))}
           {rows.length === 0 && (

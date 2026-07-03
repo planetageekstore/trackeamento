@@ -1,5 +1,6 @@
 import { requireUser, assertTenantAccess } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { fmtDateTime } from "@/lib/date";
 
 export const dynamic = "force-dynamic";
 
@@ -117,7 +118,7 @@ export default async function LeadDetailPage({
               {j.label}
             </span>
             <span className="flex-1 text-neutral-600">{j.detail}</span>
-            <time className="text-xs text-neutral-400">{new Date(j.at).toLocaleString("pt-BR")}</time>
+            <time className="text-xs text-neutral-400">{fmtDateTime(j.at)}</time>
           </li>
         ))}
         {journey.length === 0 && <li className="text-sm text-neutral-500">Jornada vazia.</li>}

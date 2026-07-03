@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireUser, assertTenantAccess } from "@/lib/auth";
 import { listChats, getMessages, type ChatItem } from "@/server/integrations/uazapi";
+import { fmtDateTime } from "@/lib/date";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +12,7 @@ function initials(name: string): string {
 function fmtTime(ts: number): string {
   if (!ts) return "";
   const ms = ts < 1e12 ? ts * 1000 : ts;
-  return new Date(ms).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  return fmtDateTime(ms, { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
 
 function Avatar({ chat }: { chat: ChatItem }) {

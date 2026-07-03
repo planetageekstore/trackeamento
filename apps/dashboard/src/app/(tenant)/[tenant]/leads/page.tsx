@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireUser, assertTenantAccess } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { fmtDateTime } from "@/lib/date";
 
 export const dynamic = "force-dynamic";
 
@@ -60,7 +61,7 @@ export default async function LeadsPage({ params }: { params: Promise<{ tenant: 
               </td>
               <td>{[l.city, l.country].filter(Boolean).join(", ") || "—"}</td>
               <td>{l.phone ?? "—"}</td>
-              <td>{new Date(l.created_at).toLocaleString("pt-BR")}</td>
+              <td>{fmtDateTime(l.created_at)}</td>
             </tr>
           ))}
           {leads.length === 0 && (
