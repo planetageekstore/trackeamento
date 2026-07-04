@@ -105,25 +105,27 @@ export default async function LeadDetailPage({
 
         {/* Anúncio de origem (tráfego pago Meta) */}
         {ad ? (
-          <div className="w-60 shrink-0 rounded-xl border bg-white p-3 shadow-sm">
-            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-blue-600">
-              ◆ Anúncio de origem
-            </p>
+          <div className="flex w-52 shrink-0 gap-2 rounded-lg border bg-white p-2 shadow-sm">
             {ad.thumbnail && (
-              <img src={ad.thumbnail} alt="" className="mb-2 h-32 w-full rounded-lg object-cover" />
+              <img src={ad.thumbnail} alt="" className="h-12 w-12 shrink-0 rounded object-cover" />
             )}
-            <p className="text-sm font-medium leading-snug text-neutral-800">{ad.name}</p>
-            {ad.campaign && <p className="mt-1 text-xs text-neutral-500">Campanha: {ad.campaign}</p>}
-            {ad.adset && <p className="text-xs text-neutral-400">Conjunto: {ad.adset}</p>}
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-600">Anúncio</p>
+              <p className="truncate text-xs font-medium text-neutral-800" title={ad.name}>
+                {ad.name}
+              </p>
+              {ad.campaign && (
+                <p className="truncate text-[11px] text-neutral-500" title={ad.campaign}>
+                  {ad.campaign}
+                </p>
+              )}
+            </div>
           </div>
         ) : paidClick ? (
-          <div className="w-60 shrink-0 rounded-xl border bg-white p-3 text-xs text-neutral-500 shadow-sm">
-            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-blue-600">
-              Tráfego pago
-            </p>
-            <p>Origem: {paidClick.utm_source ?? "—"}</p>
-            {paidClick.utm_campaign && <p>Campanha ID: {String(paidClick.utm_campaign)}</p>}
-            <p className="mt-1 text-neutral-400">Conecte o Meta Ads para ver o criativo.</p>
+          <div className="w-52 shrink-0 rounded-lg border bg-white p-2 text-[11px] text-neutral-500 shadow-sm">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-600">Tráfego pago</p>
+            <p className="truncate">Campanha ID: {String(paidClick.utm_campaign ?? "—")}</p>
+            <p className="text-neutral-400">Conecte o Meta p/ ver o criativo.</p>
           </div>
         ) : null}
       </div>

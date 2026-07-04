@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireUser, assertTenantAccess } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getAdCreatives } from "@/server/integrations/meta";
 import { fmtDateTime } from "@/lib/date";
 
 export const dynamic = "force-dynamic";
@@ -35,6 +36,29 @@ export default async function LeadsPage({ params }: { params: Promise<{ tenant: 
     .limit(100);
   const leads = (data ?? []) as LeadRow[];
 
+  // Anúncio de origem por lead: pega o ID do anúncio (utm_content) do clique e
+  // busca os criativos em lote na API do Meta.
+  const adByLead: Record<string, { thumbnail: string | null; name: string; campaign: string | null }> = {};
+  if (leads.length > 0) {
+    const { data: clickRows } = await supabase
+      .from("click")
+      .select("lead_id, utm_content, clicked_at")
+      .in("lead_id", leads.map((l) => l.id))
+      .not("utm_content", "is", null)
+      .order("clicked_at", { ascending: true });
+    const leadAd: Record<string, string> = {};
+    for (const c of clickRows ?? []) {
+      const id = String(c.utm_content ?? "");
+      const lid = c.lead_id as string;
+      if (/^\d{5,}$/.test(id) && !leadAd[lid]) leadAd[lid] = id;
+    }
+    const creatives = await getAdCreatives(tenant, Object.values(leadAd));
+    for (const [lid, adId] of Object.entries(leadAd)) {
+      const cr = creatives[adId];
+      if (cr) adByLead[lid] = { thumbnail: cr.thumbnail, name: cr.name, campaign: cr.campaign };
+    }
+  }
+
   return (
     <main className="mx-auto max-w-4xl space-y-6 p-8">
       <h1 className="text-xl font-semibold">Leads</h1>
@@ -42,6 +66,7 @@ export default async function LeadsPage({ params }: { params: Promise<{ tenant: 
         <thead>
           <tr className="border-b text-left text-neutral-500">
             <th className="py-2">Tracking ID</th>
+            <th>Anúncio</th>
             <th>Dispositivo</th>
             <th>Local</th>
             <th>Telefone</th>
@@ -57,6 +82,23 @@ export default async function LeadsPage({ params }: { params: Promise<{ tenant: 
                 </Link>
               </td>
               <td>
+                {adByLead[l.id] ? (
+                  <span
+                    className="flex items-center gap-2"
+                    title={`${adByLead[l.id]!.name}${adByLead[l.id]!.campaign ? ` — ${adByLead[l.id]!.campaign}` : ""}`}
+                  >
+                    {adByLead[l.id]!.thumbnail && (
+                      <img src={adByLead[l.id]!.thumbnail!} alt="" className="h-8 w-8 rounded object-cover" />
+                    )}
+                    <span className="max-w-[110px] truncate text-xs text-neutral-600">
+                      {adByLead[l.id]!.name}
+                    </span>
+                  </span>
+                ) : (
+                  <span className="text-neutral-300">—</span>
+                )}
+              </td>
+              <td>
                 {deviceIcon(l.device_type)} {[l.os, l.browser].filter(Boolean).join(" · ") || "—"}
               </td>
               <td>{[l.city, l.country].filter(Boolean).join(", ") || "—"}</td>
@@ -66,7 +108,7 @@ export default async function LeadsPage({ params }: { params: Promise<{ tenant: 
           ))}
           {leads.length === 0 && (
             <tr>
-              <td colSpan={5} className="py-4 text-neutral-500">
+              <td colSpan={6} className="py-4 text-neutral-500">
                 Nenhum lead capturado ainda.
               </td>
             </tr>

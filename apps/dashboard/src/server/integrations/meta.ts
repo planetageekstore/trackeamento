@@ -166,29 +166,18 @@ export interface AdCreative {
   status: string | null;
 }
 
-/**
- * Busca UM anúncio pelo ID (o `utm_content` das URLs de tráfego pago da Meta),
- * com nome, campanha, conjunto e a miniatura do criativo. Retorna null se o
- * tenant não tem Meta conectado ou o ID não é numérico.
- */
-export async function getAdCreative(tenantId: string, adId: string): Promise<AdCreative | null> {
-  if (!/^\d{5,}$/.test(adId)) return null;
-  const t = await metaToken(tenantId);
-  if (!t) return null;
-  const fields =
-    "name,effective_status,adset{name},campaign{name},creative{thumbnail_url,image_url}";
-  const res = await fetch(
-    `${GRAPH()}/${adId}?fields=${encodeURIComponent(fields)}&access_token=${t.token}`,
-  );
-  if (!res.ok) return null;
-  const a = (await res.json()) as {
-    id?: string;
-    name?: string;
-    effective_status?: string;
-    adset?: { name?: string };
-    campaign?: { name?: string };
-    creative?: { thumbnail_url?: string; image_url?: string };
-  };
+const AD_FIELDS = "name,effective_status,adset{name},campaign{name},creative{thumbnail_url,image_url}";
+
+interface RawAd {
+  id?: string;
+  name?: string;
+  effective_status?: string;
+  adset?: { name?: string };
+  campaign?: { name?: string };
+  creative?: { thumbnail_url?: string; image_url?: string };
+}
+
+function mapAd(a: RawAd): AdCreative | null {
   if (!a.id) return null;
   return {
     id: a.id,
@@ -198,6 +187,46 @@ export async function getAdCreative(tenantId: string, adId: string): Promise<AdC
     adset: a.adset?.name ?? null,
     status: a.effective_status ?? null,
   };
+}
+
+async function fetchAd(token: string, adId: string): Promise<AdCreative | null> {
+  try {
+    const res = await fetch(`${GRAPH()}/${adId}?fields=${encodeURIComponent(AD_FIELDS)}&access_token=${token}`);
+    if (!res.ok) return null;
+    return mapAd((await res.json()) as RawAd);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Busca UM anúncio pelo ID (o `utm_content` das URLs de tráfego pago da Meta),
+ * com nome, campanha, conjunto e a miniatura do criativo. Retorna null se o
+ * tenant não tem Meta conectado ou o ID não é numérico.
+ */
+export async function getAdCreative(tenantId: string, adId: string): Promise<AdCreative | null> {
+  if (!/^\d{5,}$/.test(adId)) return null;
+  const t = await metaToken(tenantId);
+  if (!t) return null;
+  return fetchAd(t.token, adId);
+}
+
+/** Busca vários anúncios de uma vez (para a lista de leads). Retorna mapa id→criativo. */
+export async function getAdCreatives(
+  tenantId: string,
+  adIds: string[],
+): Promise<Record<string, AdCreative>> {
+  const ids = [...new Set(adIds.filter((id) => /^\d{5,}$/.test(id)))].slice(0, 60);
+  if (ids.length === 0) return {};
+  const t = await metaToken(tenantId);
+  if (!t) return {};
+  const out: Record<string, AdCreative> = {};
+  const results = await Promise.all(ids.map((id) => fetchAd(t.token, id)));
+  ids.forEach((id, i) => {
+    const r = results[i];
+    if (r) out[id] = r;
+  });
+  return out;
 }
 
 export interface AdRow {
