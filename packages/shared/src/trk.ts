@@ -43,15 +43,63 @@ export function isValidTrackingCode(code: string): boolean {
   return TRK_CODE_REGEX.test(code);
 }
 
-/** Extrai o primeiro `TRK-XXXX` de um texto (ex.: mensagem de WhatsApp). */
-export function extractTrackingCode(text: string): string | null {
-  const match = text.match(TRK_REF_REGEX);
-  return match ? match[1]! : null;
+// ---------------------------------------------------------------------------
+// Marcador INVISÍVEL (zero-width): o cliente vê a mensagem limpa, mas o código
+// viaja escondido no texto e o servidor decodifica. O sufixo de 12 chars
+// (base32 Crockford) é codificado em bits: ZWSP=0, ZWNJ=1, delimitado por WJ.
+// ---------------------------------------------------------------------------
+const ZW_SEP = String.fromCharCode(0x2060); // Word Joiner — delimita o bloco
+const ZW_0 = String.fromCharCode(0x200b); // Zero Width Space — bit 0
+const ZW_1 = String.fromCharCode(0x200c); // Zero Width Non-Joiner — bit 1
+
+/** Codifica o tracking code como sequência invisível (para anexar à mensagem). */
+export function encodeHiddenRef(trackingCode: string): string {
+  const suffix = trackingCode.replace(/^TRK-/, "");
+  let bits = "";
+  for (const ch of suffix) {
+    const idx = CROCKFORD.indexOf(ch);
+    if (idx < 0) return ""; // char fora do alfabeto — não codifica
+    bits += idx.toString(2).padStart(5, "0");
+  }
+  let out = ZW_SEP;
+  for (const b of bits) out += b === "1" ? ZW_1 : ZW_0;
+  return out + ZW_SEP;
 }
 
-/** Monta o marcador a ser anexado à mensagem de WhatsApp. */
+/** Decodifica um tracking code escondido (zero-width) de um texto, se houver. */
+export function decodeHiddenRef(text: string): string | null {
+  const start = text.indexOf(ZW_SEP);
+  if (start < 0) return null;
+  const end = text.indexOf(ZW_SEP, start + 1);
+  if (end < 0) return null;
+  let bits = "";
+  for (const c of text.slice(start + 1, end)) {
+    if (c === ZW_0) bits += "0";
+    else if (c === ZW_1) bits += "1";
+  }
+  if (bits.length === 0 || bits.length % 5 !== 0) return null;
+  let suffix = "";
+  for (let i = 0; i < bits.length; i += 5) {
+    const ch = CROCKFORD[parseInt(bits.slice(i, i + 5), 2)];
+    if (!ch) return null;
+    suffix += ch;
+  }
+  const code = `TRK-${suffix}`;
+  return TRK_CODE_REGEX.test(code) ? code : null;
+}
+
+/** Extrai o tracking code de um texto: `[Ref: TRK-…]` → `TRK-…` cru → escondido. */
+export function extractTrackingCode(text: string): string | null {
+  const ref = text.match(TRK_REF_REGEX);
+  if (ref) return ref[1]!;
+  const raw = text.match(/TRK-[0-9A-HJKMNP-TV-Z]+/);
+  if (raw) return raw[0];
+  return decodeHiddenRef(text);
+}
+
+/** Monta o marcador (invisível) a ser anexado à mensagem de WhatsApp. */
 export function buildRefMarker(trackingCode: string): string {
-  return `[Ref: ${trackingCode}]`;
+  return encodeHiddenRef(trackingCode);
 }
 
 /** Extrai UTMs de um `URLSearchParams` (ou querystring). */
