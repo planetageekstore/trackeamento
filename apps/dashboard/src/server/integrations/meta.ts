@@ -388,6 +388,88 @@ export async function getCampaignsInsights(
   });
 }
 
+export interface DailyPoint {
+  date: string;
+  campaign: string;
+  spend: number;
+  clicks: number;
+  impressions: number;
+}
+
+/** Gasto/cliques/impressões por DIA e por campanha (para gráficos de evolução). */
+export async function getDailyInsights(
+  tenantId: string,
+  accountId: string | null,
+  since: string,
+  until: string,
+): Promise<DailyPoint[]> {
+  const t = await metaToken(tenantId);
+  if (!t) return [];
+  const acc = (accountId || t.accountRef || "").replace(/^act_/, "");
+  if (!acc) return [];
+  const tr = encodeURIComponent(JSON.stringify({ since, until }));
+  const out: DailyPoint[] = [];
+  let url: string | null =
+    `${GRAPH()}/act_${acc}/insights?level=campaign&fields=campaign_name,spend,clicks,impressions` +
+    `&time_increment=1&time_range=${tr}&limit=500&access_token=${t.token}`;
+  for (let p = 0; url && p < 10; p++) {
+    const r: Response = await fetch(url);
+    if (!r.ok) break;
+    const j = (await r.json()) as {
+      data?: Array<Record<string, string>>;
+      paging?: { next?: string };
+    };
+    for (const row of j.data ?? []) {
+      out.push({
+        date: row.date_start ?? "",
+        campaign: row.campaign_name ?? "—",
+        spend: Number(row.spend ?? 0),
+        clicks: Number(row.clicks ?? 0),
+        impressions: Number(row.impressions ?? 0),
+      });
+    }
+    url = j.paging?.next ?? null;
+  }
+  return out;
+}
+
+export interface DemoRow {
+  age: string;
+  gender: string;
+  spend: number;
+  impressions: number;
+  clicks: number;
+  reach: number;
+}
+
+/** Quebra por IDADE × GÊNERO no período (demografia p/ tráfego pago). */
+export async function getDemographics(
+  tenantId: string,
+  accountId: string | null,
+  since: string,
+  until: string,
+): Promise<DemoRow[]> {
+  const t = await metaToken(tenantId);
+  if (!t) return [];
+  const acc = (accountId || t.accountRef || "").replace(/^act_/, "");
+  if (!acc) return [];
+  const tr = encodeURIComponent(JSON.stringify({ since, until }));
+  const res = await fetch(
+    `${GRAPH()}/act_${acc}/insights?level=account&breakdowns=age,gender` +
+      `&fields=spend,impressions,clicks,reach&time_range=${tr}&limit=200&access_token=${t.token}`,
+  );
+  if (!res.ok) return [];
+  const j = (await res.json()) as { data?: Array<Record<string, string>> };
+  return (j.data ?? []).map((r) => ({
+    age: r.age ?? "—",
+    gender: r.gender ?? "—",
+    spend: Number(r.spend ?? 0),
+    impressions: Number(r.impressions ?? 0),
+    clicks: Number(r.clicks ?? 0),
+    reach: Number(r.reach ?? 0),
+  }));
+}
+
 /** Importa custos das últimas N janelas diárias e faz upsert em campaign_cost. */
 export async function importMetaCosts(tenantId: string, days = 7): Promise<number> {
   const supabase = createSupabaseServiceClient();
