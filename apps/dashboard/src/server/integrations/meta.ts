@@ -319,6 +319,75 @@ export async function getAdsReport(
   );
 }
 
+export interface CampaignMetrics {
+  id: string;
+  name: string;
+  objective: string | null;
+  status: string | null;
+  spend: number;
+  impressions: number;
+  clicks: number;
+  reach: number;
+  ctr: number; // %
+  cpc: number; // custo por clique (moeda da conta)
+  cpm: number; // custo por mil impressões
+}
+
+/**
+ * Métricas por campanha no período: gasto, impressões, cliques, alcance, CTR,
+ * CPC, CPM + objetivo/status. Puxa insights + metadados da campanha ao vivo.
+ */
+export async function getCampaignsInsights(
+  tenantId: string,
+  accountId: string | null,
+  since: string,
+  until: string,
+): Promise<CampaignMetrics[]> {
+  const t = await metaToken(tenantId);
+  if (!t) return [];
+  const acc = (accountId || t.accountRef || "").replace(/^act_/, "");
+  if (!acc) return [];
+
+  // Metadados (objetivo/status) por campanha.
+  const meta = new Map<string, { objective?: string; status?: string; name?: string }>();
+  const cr = await fetch(
+    `${GRAPH()}/act_${acc}/campaigns?fields=id,name,objective,effective_status&limit=200&access_token=${t.token}`,
+  );
+  if (cr.ok) {
+    const j = (await cr.json()) as {
+      data?: Array<{ id: string; name?: string; objective?: string; effective_status?: string }>;
+    };
+    for (const c of j.data ?? [])
+      meta.set(c.id, { objective: c.objective, status: c.effective_status, name: c.name });
+  }
+
+  const tr = encodeURIComponent(JSON.stringify({ since, until }));
+  const res = await fetch(
+    `${GRAPH()}/act_${acc}/insights?level=campaign&fields=campaign_id,campaign_name,spend,impressions,` +
+      `clicks,reach,ctr,cpc,cpm&time_range=${tr}&limit=200&access_token=${t.token}`,
+  );
+  if (!res.ok) return [];
+  const j = (await res.json()) as {
+    data?: Array<Record<string, string>>;
+  };
+  return (j.data ?? []).map((r) => {
+    const m = meta.get(r.campaign_id!) ?? {};
+    return {
+      id: r.campaign_id!,
+      name: r.campaign_name ?? m.name ?? r.campaign_id!,
+      objective: m.objective ?? null,
+      status: m.status ?? null,
+      spend: Number(r.spend ?? 0),
+      impressions: Number(r.impressions ?? 0),
+      clicks: Number(r.clicks ?? 0),
+      reach: Number(r.reach ?? 0),
+      ctr: Number(r.ctr ?? 0),
+      cpc: Number(r.cpc ?? 0),
+      cpm: Number(r.cpm ?? 0),
+    };
+  });
+}
+
 /** Importa custos das últimas N janelas diárias e faz upsert em campaign_cost. */
 export async function importMetaCosts(tenantId: string, days = 7): Promise<number> {
   const supabase = createSupabaseServiceClient();

@@ -59,6 +59,12 @@ export default async function LeadDetailPage({
     ? await getAdCreative(tenant, String(paidClick.utm_content))
     : null;
 
+  // Lead que chegou pelo link da bio do Instagram (provável campanha de
+  // tráfego p/ perfil — atribuição por lead não é exata, ver página Campanhas).
+  const bioClick = (clicks ?? []).find(
+    (c) => c.utm_content === "link_in_bio" || (c.utm_source === "ig" && c.utm_medium === "social"),
+  );
+
   // Extrai o caminho (path) de uma URL para exibir a rota de forma enxuta.
   const toPath = (url: unknown): string => {
     if (typeof url !== "string" || !url) return "";
@@ -126,6 +132,14 @@ export default async function LeadDetailPage({
             <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-600">Tráfego pago</p>
             <p className="truncate">Campanha ID: {String(paidClick.utm_campaign ?? "—")}</p>
             <p className="text-neutral-400">Conecte o Meta p/ ver o criativo.</p>
+          </div>
+        ) : bioClick ? (
+          <div className="w-52 shrink-0 rounded-lg border bg-white p-2 text-[11px] text-neutral-500 shadow-sm">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-pink-600">
+              Instagram · bio
+            </p>
+            <p className="text-neutral-600">Veio pelo link da bio do perfil.</p>
+            <p className="mt-1 text-neutral-400">Provável: campanha TRAFEGO P/ PERFIL.</p>
           </div>
         ) : null}
       </div>

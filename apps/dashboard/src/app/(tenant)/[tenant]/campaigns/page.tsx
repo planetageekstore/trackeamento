@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireUser, assertTenantAccess } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { listAdAccounts, getAdsReport } from "@/server/integrations/meta";
+import { listAdAccounts, getAdsReport, getCampaignsInsights } from "@/server/integrations/meta";
 
 export const dynamic = "force-dynamic";
 
@@ -49,8 +49,28 @@ export default async function CampaignsPage({
   const until = sp.until ?? ymd(new Date());
   const since = sp.since ?? ymd(new Date(Date.now() - 30 * 864e5));
 
-  const rows = account ? await getAdsReport(tenant, account, since, until) : [];
+  const [rows, campaigns, { count: bioLeads }] = account
+    ? await Promise.all([
+        getAdsReport(tenant, account, since, until),
+        getCampaignsInsights(tenant, account, since, until),
+        supabase
+          .from("click")
+          .select("id", { count: "exact", head: true })
+          .eq("tenant_id", tenant)
+          .eq("utm_content", "link_in_bio")
+          .gte("clicked_at", since)
+          .lte("clicked_at", `${until}T23:59:59`),
+      ])
+    : [[], [], { count: 0 }];
   const totalSpend = rows.reduce((s, r) => s + r.spend, 0);
+
+  // Estimativa A: campanha de tráfego p/ perfil → leads que chegaram pela bio.
+  const profileCampaign = campaigns.find(
+    (c) => /perfil/i.test(c.name) || c.objective === "OUTCOME_TRAFFIC",
+  );
+  const bio = bioLeads ?? 0;
+  const costPerBioLead = profileCampaign && bio > 0 ? profileCampaign.spend / bio : null;
+  const money = (n: number) => `R$ ${n.toFixed(2)}`;
 
   return (
     <main className="mx-auto max-w-5xl space-y-6 p-8">
@@ -104,6 +124,83 @@ export default async function CampaignsPage({
             </div>
           </div>
 
+          {/* Estimativa A: tráfego p/ perfil → leads da bio */}
+          {profileCampaign && (
+            <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
+              <p className="text-sm font-medium text-blue-900">
+                Tráfego p/ perfil → Instagram (bio) · estimativa
+              </p>
+              <div className="mt-2 flex flex-wrap gap-6 text-sm">
+                <div>
+                  <p className="text-neutral-500">Campanha</p>
+                  <p className="font-medium">{profileCampaign.name}</p>
+                </div>
+                <div>
+                  <p className="text-neutral-500">Gasto</p>
+                  <p className="font-semibold">{money(profileCampaign.spend)}</p>
+                </div>
+                <div>
+                  <p className="text-neutral-500">Leads pela bio</p>
+                  <p className="font-semibold">{bio}</p>
+                </div>
+                <div>
+                  <p className="text-neutral-500">Custo por lead (estim.)</p>
+                  <p className="font-semibold text-blue-700">
+                    {costPerBioLead != null ? money(costPerBioLead) : "—"}
+                  </p>
+                </div>
+              </div>
+              <p className="mt-2 text-xs text-neutral-500">
+                Estimativa: o link da bio é fixo, então a atribuição por lead não é exata — mas a
+                campanha de tráfego p/ perfil é a principal fonte desses acessos.
+              </p>
+            </div>
+          )}
+
+          {/* Métricas por campanha (CPC / CTR / CPM) */}
+          {campaigns.length > 0 && (
+            <div>
+              <h2 className="mb-2 text-sm font-medium text-neutral-700">Métricas por campanha</h2>
+              <table className="w-full border-collapse text-sm">
+                <thead>
+                  <tr className="border-b text-left text-neutral-500">
+                    <th className="py-2">Campanha</th>
+                    <th>Objetivo</th>
+                    <th>Status</th>
+                    <th className="text-right">Gasto</th>
+                    <th className="text-right">Impr.</th>
+                    <th className="text-right">Cliques</th>
+                    <th className="text-right">CTR</th>
+                    <th className="text-right">CPC</th>
+                    <th className="text-right">CPM</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...campaigns]
+                    .sort((a, b) => b.spend - a.spend)
+                    .map((c) => (
+                      <tr key={c.id} className="border-b">
+                        <td className="py-2 pr-2 font-medium">{c.name}</td>
+                        <td className="pr-2 text-xs text-neutral-500">
+                          {(c.objective ?? "").replace("OUTCOME_", "") || "—"}
+                        </td>
+                        <td>
+                          <StatusTag status={c.status ?? ""} />
+                        </td>
+                        <td className="text-right">{money(c.spend)}</td>
+                        <td className="text-right">{c.impressions.toLocaleString("pt-BR")}</td>
+                        <td className="text-right">{c.clicks.toLocaleString("pt-BR")}</td>
+                        <td className="text-right">{c.ctr.toFixed(2)}%</td>
+                        <td className="text-right">{money(c.cpc)}</td>
+                        <td className="text-right">{money(c.cpm)}</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <h2 className="mb-2 mt-2 text-sm font-medium text-neutral-700">Anúncios (criativos)</h2>
           <table className="w-full border-collapse text-sm">
             <thead>
               <tr className="border-b text-left text-neutral-500">
