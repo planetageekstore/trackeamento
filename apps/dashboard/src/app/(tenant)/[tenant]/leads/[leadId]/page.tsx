@@ -1,5 +1,6 @@
 import { requireUser, assertTenantAccess } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getAdCreative } from "@/server/integrations/meta";
 import { fmtDateTime } from "@/lib/date";
 
 export const dynamic = "force-dynamic";
@@ -45,10 +46,18 @@ export default async function LeadDetailPage({
   const [{ data: clicks }, { data: events }] = await Promise.all([
     supabase
       .from("click")
-      .select("utm_source, utm_campaign, fbclid, gclid, landing_page_url, clicked_at")
+      .select("utm_source, utm_medium, utm_campaign, utm_content, utm_term, fbclid, gclid, landing_page_url, clicked_at")
       .eq("lead_id", leadId),
     supabase.from("event").select("event_type, value, event_data, occurred_at").eq("lead_id", leadId),
   ]);
+
+  // Tráfego pago do Meta: o ID do anúncio vem no utm_content. Busca o criativo.
+  const paidClick = (clicks ?? []).find(
+    (c) => c.utm_content && /^\d{5,}$/.test(String(c.utm_content)),
+  );
+  const ad = paidClick?.utm_content
+    ? await getAdCreative(tenant, String(paidClick.utm_content))
+    : null;
 
   // Extrai o caminho (path) de uma URL para exibir a rota de forma enxuta.
   const toPath = (url: unknown): string => {
@@ -84,13 +93,39 @@ export default async function LeadDetailPage({
   ].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
 
   return (
-    <main className="mx-auto max-w-3xl space-y-6 p-8">
-      <div>
-        <h1 className="font-mono text-lg font-semibold">{lead?.tracking_code ?? "Lead"}</h1>
-        {lead?.name && <p className="text-sm font-medium text-neutral-800">{lead.name}</p>}
-        <p className="text-sm text-neutral-500">
-          {lead?.phone ?? "sem telefone"} · {lead?.email ?? "sem e-mail"}
-        </p>
+    <main className="mx-auto max-w-4xl space-y-6 p-8">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="font-mono text-lg font-semibold">{lead?.tracking_code ?? "Lead"}</h1>
+          {lead?.name && <p className="text-sm font-medium text-neutral-800">{lead.name}</p>}
+          <p className="text-sm text-neutral-500">
+            {lead?.phone ?? "sem telefone"} · {lead?.email ?? "sem e-mail"}
+          </p>
+        </div>
+
+        {/* Anúncio de origem (tráfego pago Meta) */}
+        {ad ? (
+          <div className="w-60 shrink-0 rounded-xl border bg-white p-3 shadow-sm">
+            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-blue-600">
+              ◆ Anúncio de origem
+            </p>
+            {ad.thumbnail && (
+              <img src={ad.thumbnail} alt="" className="mb-2 h-32 w-full rounded-lg object-cover" />
+            )}
+            <p className="text-sm font-medium leading-snug text-neutral-800">{ad.name}</p>
+            {ad.campaign && <p className="mt-1 text-xs text-neutral-500">Campanha: {ad.campaign}</p>}
+            {ad.adset && <p className="text-xs text-neutral-400">Conjunto: {ad.adset}</p>}
+          </div>
+        ) : paidClick ? (
+          <div className="w-60 shrink-0 rounded-xl border bg-white p-3 text-xs text-neutral-500 shadow-sm">
+            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-blue-600">
+              Tráfego pago
+            </p>
+            <p>Origem: {paidClick.utm_source ?? "—"}</p>
+            {paidClick.utm_campaign && <p>Campanha ID: {String(paidClick.utm_campaign)}</p>}
+            <p className="mt-1 text-neutral-400">Conecte o Meta Ads para ver o criativo.</p>
+          </div>
+        ) : null}
       </div>
 
       {sessionRows.length > 0 && (

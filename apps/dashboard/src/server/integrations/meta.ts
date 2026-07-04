@@ -157,6 +157,49 @@ export async function listAdAccounts(
   return (j.data ?? []).map((a) => ({ id: a.account_id, name: a.name ?? a.account_id }));
 }
 
+export interface AdCreative {
+  id: string;
+  name: string;
+  thumbnail: string | null;
+  campaign: string | null;
+  adset: string | null;
+  status: string | null;
+}
+
+/**
+ * Busca UM anúncio pelo ID (o `utm_content` das URLs de tráfego pago da Meta),
+ * com nome, campanha, conjunto e a miniatura do criativo. Retorna null se o
+ * tenant não tem Meta conectado ou o ID não é numérico.
+ */
+export async function getAdCreative(tenantId: string, adId: string): Promise<AdCreative | null> {
+  if (!/^\d{5,}$/.test(adId)) return null;
+  const t = await metaToken(tenantId);
+  if (!t) return null;
+  const fields =
+    "name,effective_status,adset{name},campaign{name},creative{thumbnail_url,image_url}";
+  const res = await fetch(
+    `${GRAPH()}/${adId}?fields=${encodeURIComponent(fields)}&access_token=${t.token}`,
+  );
+  if (!res.ok) return null;
+  const a = (await res.json()) as {
+    id?: string;
+    name?: string;
+    effective_status?: string;
+    adset?: { name?: string };
+    campaign?: { name?: string };
+    creative?: { thumbnail_url?: string; image_url?: string };
+  };
+  if (!a.id) return null;
+  return {
+    id: a.id,
+    name: a.name ?? "Anúncio",
+    thumbnail: a.creative?.thumbnail_url ?? a.creative?.image_url ?? null,
+    campaign: a.campaign?.name ?? null,
+    adset: a.adset?.name ?? null,
+    status: a.effective_status ?? null,
+  };
+}
+
 export interface AdRow {
   adId: string;
   campaign: string;
