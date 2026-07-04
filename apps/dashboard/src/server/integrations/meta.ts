@@ -422,6 +422,7 @@ export async function getBreakdown(
   since: string,
   until: string,
   breakdown: string,
+  keyFieldParam?: string,
 ): Promise<BreakdownRow[]> {
   const t = await metaToken(tenantId);
   if (!t) return [];
@@ -434,7 +435,7 @@ export async function getBreakdown(
   );
   if (!res.ok) return [];
   const j = (await res.json()) as { data?: Array<Record<string, string>> };
-  const keyField = breakdown.split(",")[0]!;
+  const keyField = keyFieldParam ?? breakdown.split(",")[0]!;
   const agg = new Map<string, BreakdownRow>();
   for (const r of j.data ?? []) {
     const key = String(r[keyField] ?? "—");

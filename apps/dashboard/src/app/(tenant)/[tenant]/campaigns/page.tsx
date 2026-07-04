@@ -129,7 +129,7 @@ export default async function CampaignsPage({
           .eq("utm_content", "link_in_bio")
           .gte("clicked_at", since)
           .lte("clicked_at", `${until}T23:59:59`),
-        getBreakdown(tenant, account, since, until, "platform_position"),
+        getBreakdown(tenant, account, since, until, "publisher_platform,platform_position", "platform_position"),
         getBreakdown(tenant, account, since, until, "region"),
         getBreakdown(tenant, account, since, until, "impression_device"),
         getBreakdown(tenant, account, since, until, "hourly_stats_aggregated_by_advertiser_time_zone"),
