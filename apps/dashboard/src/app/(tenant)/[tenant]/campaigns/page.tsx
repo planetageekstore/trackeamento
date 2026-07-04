@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireUser, assertTenantAccess } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { listAdAccounts, getAdsReport, getCampaignsInsights } from "@/server/integrations/meta";
+import { listAdAccounts, getAdsReport, getCampaignsInsights, getBreakdown, type BreakdownRow } from "@/server/integrations/meta";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +19,75 @@ function StatusTag({ status }: { status: string }) {
     >
       {status || "—"}
     </span>
+  );
+}
+
+const placementLabel = (k: string): string =>
+  ({
+    feed: "Feed",
+    instagram_stories: "Stories (IG)",
+    facebook_stories: "Stories (FB)",
+    instagram_reels: "Reels (IG)",
+    facebook_reels: "Reels (FB)",
+    instream_video: "Vídeo in-stream",
+    right_hand_column: "Coluna direita",
+    marketplace: "Marketplace",
+    instagram_explore: "Explorar (IG)",
+    instagram_explore_grid_home: "Explorar (IG)",
+    facebook_reels_overlay: "Reels overlay",
+    search: "Busca",
+    biz_disco_feed: "Descoberta",
+  })[k] ?? k;
+
+const deviceLabel = (k: string): string =>
+  ({
+    iphone: "iPhone",
+    ipad: "iPad",
+    android_smartphone: "Android (celular)",
+    android_tablet: "Android (tablet)",
+    desktop: "Desktop",
+    other: "Outro",
+  })[k] ?? k;
+
+function BreakdownCard({
+  title,
+  rows,
+  tr,
+  sortByKey,
+}: {
+  title: string;
+  rows: BreakdownRow[];
+  tr?: (k: string) => string;
+  sortByKey?: boolean;
+}) {
+  const total = rows.reduce((s, r) => s + r.spend, 0);
+  const list = sortByKey
+    ? [...rows].sort((a, b) => a.key.localeCompare(b.key))
+    : [...rows].sort((a, b) => b.spend - a.spend).slice(0, 10);
+  return (
+    <div className="rounded-xl border bg-white p-4">
+      <h3 className="mb-2 text-sm font-medium text-neutral-700">{title}</h3>
+      {list.length === 0 ? (
+        <p className="text-xs text-neutral-400">Sem dados no período.</p>
+      ) : (
+        <div className="space-y-1">
+          {list.map((r) => (
+            <div key={r.key} className="flex items-center gap-2 text-xs">
+              <span className="w-24 shrink-0 truncate text-neutral-600" title={r.key}>
+                {tr ? tr(r.key) : r.key}
+              </span>
+              <div className="h-3 flex-1 overflow-hidden rounded bg-neutral-100">
+                <div
+                  className="h-full rounded bg-blue-500"
+                  style={{ width: `${total ? (r.spend / total) * 100 : 0}%` }}
+                />
+              </div>
+              <span className="w-16 shrink-0 text-right text-neutral-600">R$ {r.spend.toFixed(2)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -49,7 +118,7 @@ export default async function CampaignsPage({
   const until = sp.until ?? ymd(new Date());
   const since = sp.since ?? ymd(new Date(Date.now() - 30 * 864e5));
 
-  const [rows, campaigns, { count: bioLeads }] = account
+  const [rows, campaigns, { count: bioLeads }, byPlacement, byRegion, byDevice, byHour] = account
     ? await Promise.all([
         getAdsReport(tenant, account, since, until),
         getCampaignsInsights(tenant, account, since, until),
@@ -60,8 +129,12 @@ export default async function CampaignsPage({
           .eq("utm_content", "link_in_bio")
           .gte("clicked_at", since)
           .lte("clicked_at", `${until}T23:59:59`),
+        getBreakdown(tenant, account, since, until, "platform_position"),
+        getBreakdown(tenant, account, since, until, "region"),
+        getBreakdown(tenant, account, since, until, "impression_device"),
+        getBreakdown(tenant, account, since, until, "hourly_stats_aggregated_by_advertiser_time_zone"),
       ])
-    : [[], [], { count: 0 }];
+    : [[], [], { count: 0 }, [], [], [], []];
   const totalSpend = rows.reduce((s, r) => s + r.spend, 0);
 
   // Estimativa A: campanha de tráfego p/ perfil → leads que chegaram pela bio.
@@ -165,7 +238,6 @@ export default async function CampaignsPage({
                 <thead>
                   <tr className="border-b text-left text-neutral-500">
                     <th className="py-2">Campanha</th>
-                    <th>Objetivo</th>
                     <th>Status</th>
                     <th className="text-right">Gasto</th>
                     <th className="text-right">Impr.</th>
@@ -173,6 +245,10 @@ export default async function CampaignsPage({
                     <th className="text-right">CTR</th>
                     <th className="text-right">CPC</th>
                     <th className="text-right">CPM</th>
+                    <th className="text-right">Freq.</th>
+                    <th className="text-right">Result.</th>
+                    <th className="text-right">Custo/res.</th>
+                    <th className="text-right">ROAS</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -180,9 +256,11 @@ export default async function CampaignsPage({
                     .sort((a, b) => b.spend - a.spend)
                     .map((c) => (
                       <tr key={c.id} className="border-b">
-                        <td className="py-2 pr-2 font-medium">{c.name}</td>
-                        <td className="pr-2 text-xs text-neutral-500">
-                          {(c.objective ?? "").replace("OUTCOME_", "") || "—"}
+                        <td className="py-2 pr-2 font-medium">
+                          {c.name}
+                          <span className="ml-1 text-[10px] text-neutral-400">
+                            {(c.objective ?? "").replace("OUTCOME_", "")}
+                          </span>
                         </td>
                         <td>
                           <StatusTag status={c.status ?? ""} />
@@ -193,10 +271,26 @@ export default async function CampaignsPage({
                         <td className="text-right">{c.ctr.toFixed(2)}%</td>
                         <td className="text-right">{money(c.cpc)}</td>
                         <td className="text-right">{money(c.cpm)}</td>
+                        <td className="text-right">{c.frequency.toFixed(2)}</td>
+                        <td className="text-right">{c.results || "—"}</td>
+                        <td className="text-right">{c.results > 0 ? money(c.spend / c.results) : "—"}</td>
+                        <td className={`text-right ${c.roas >= 1 ? "text-emerald-600" : ""}`}>
+                          {c.roas > 0 ? `${c.roas.toFixed(2)}x` : "—"}
+                        </td>
                       </tr>
                     ))}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {/* Quebras: posicionamento, região, dispositivo, hora */}
+          {byPlacement.length + byRegion.length + byDevice.length + byHour.length > 0 && (
+            <div className="grid gap-4 md:grid-cols-2">
+              <BreakdownCard title="Por posicionamento" rows={byPlacement} tr={placementLabel} />
+              <BreakdownCard title="Por dispositivo" rows={byDevice} tr={deviceLabel} />
+              <BreakdownCard title="Por região" rows={byRegion} />
+              <BreakdownCard title="Por hora do dia" rows={byHour} tr={(k) => k.slice(0, 5)} sortByKey />
             </div>
           )}
 

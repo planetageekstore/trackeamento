@@ -331,7 +331,17 @@ export interface CampaignMetrics {
   ctr: number; // %
   cpc: number; // custo por clique (moeda da conta)
   cpm: number; // custo por mil impressões
+  frequency: number;
+  linkClicks: number;
+  results: number; // leads + compras (conversões)
+  revenue: number; // valor das compras
+  roas: number; // retorno sobre o gasto (revenue/spend)
 }
+
+type MetaAction = { action_type: string; value: string };
+const sumActions = (arr: MetaAction[] | undefined, types: string[]): number =>
+  (arr ?? []).filter((a) => types.some((t) => a.action_type.includes(t))).reduce((s, a) => s + Number(a.value), 0);
+const RESULT_TYPES = ["purchase", "lead", "onsite_conversion.lead_grouped"];
 
 /**
  * Métricas por campanha no período: gasto, impressões, cliques, alcance, CTR,
@@ -364,28 +374,78 @@ export async function getCampaignsInsights(
   const tr = encodeURIComponent(JSON.stringify({ since, until }));
   const res = await fetch(
     `${GRAPH()}/act_${acc}/insights?level=campaign&fields=campaign_id,campaign_name,spend,impressions,` +
-      `clicks,reach,ctr,cpc,cpm&time_range=${tr}&limit=200&access_token=${t.token}`,
+      `clicks,reach,ctr,cpc,cpm,frequency,inline_link_clicks,actions,action_values,purchase_roas` +
+      `&time_range=${tr}&limit=200&access_token=${t.token}`,
   );
   if (!res.ok) return [];
-  const j = (await res.json()) as {
-    data?: Array<Record<string, string>>;
-  };
+  const j = (await res.json()) as { data?: Array<Record<string, unknown>> };
   return (j.data ?? []).map((r) => {
-    const m = meta.get(r.campaign_id!) ?? {};
+    const m = meta.get(r.campaign_id as string) ?? {};
+    const spend = Number(r.spend ?? 0);
+    const actions = r.actions as MetaAction[] | undefined;
+    const revenue = sumActions(r.action_values as MetaAction[] | undefined, ["purchase"]);
+    const roasArr = r.purchase_roas as MetaAction[] | undefined;
+    const roas = roasArr?.[0]?.value ? Number(roasArr[0]!.value) : spend > 0 ? revenue / spend : 0;
     return {
-      id: r.campaign_id!,
-      name: r.campaign_name ?? m.name ?? r.campaign_id!,
+      id: r.campaign_id as string,
+      name: (r.campaign_name as string) ?? m.name ?? (r.campaign_id as string),
       objective: m.objective ?? null,
       status: m.status ?? null,
-      spend: Number(r.spend ?? 0),
+      spend,
       impressions: Number(r.impressions ?? 0),
       clicks: Number(r.clicks ?? 0),
       reach: Number(r.reach ?? 0),
       ctr: Number(r.ctr ?? 0),
       cpc: Number(r.cpc ?? 0),
       cpm: Number(r.cpm ?? 0),
+      frequency: Number(r.frequency ?? 0),
+      linkClicks: Number(r.inline_link_clicks ?? 0),
+      results: sumActions(actions, RESULT_TYPES),
+      revenue,
+      roas,
     };
   });
+}
+
+export interface BreakdownRow {
+  key: string;
+  spend: number;
+  impressions: number;
+  clicks: number;
+  reach: number;
+}
+
+/** Quebra genérica de insights por uma dimensão (posicionamento, região, device, hora). */
+export async function getBreakdown(
+  tenantId: string,
+  accountId: string | null,
+  since: string,
+  until: string,
+  breakdown: string,
+): Promise<BreakdownRow[]> {
+  const t = await metaToken(tenantId);
+  if (!t) return [];
+  const acc = (accountId || t.accountRef || "").replace(/^act_/, "");
+  if (!acc) return [];
+  const tr = encodeURIComponent(JSON.stringify({ since, until }));
+  const res = await fetch(
+    `${GRAPH()}/act_${acc}/insights?level=account&breakdowns=${breakdown}` +
+      `&fields=spend,impressions,clicks,reach&time_range=${tr}&limit=300&access_token=${t.token}`,
+  );
+  if (!res.ok) return [];
+  const j = (await res.json()) as { data?: Array<Record<string, string>> };
+  const keyField = breakdown.split(",")[0]!;
+  const agg = new Map<string, BreakdownRow>();
+  for (const r of j.data ?? []) {
+    const key = String(r[keyField] ?? "—");
+    const cur = agg.get(key) ?? { key, spend: 0, impressions: 0, clicks: 0, reach: 0 };
+    cur.spend += Number(r.spend ?? 0);
+    cur.impressions += Number(r.impressions ?? 0);
+    cur.clicks += Number(r.clicks ?? 0);
+    cur.reach += Number(r.reach ?? 0);
+    agg.set(key, cur);
+  }
+  return [...agg.values()].sort((a, b) => b.spend - a.spend);
 }
 
 export interface DailyPoint {

@@ -46,14 +46,22 @@ function Bars({ data, total, color }: { data: [string, number][]; total: number;
   );
 }
 
-export default async function DashboardPage({ params }: { params: Promise<{ tenant: string }> }) {
+export default async function DashboardPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ tenant: string }>;
+  searchParams: Promise<{ d?: string }>;
+}) {
   const { tenant } = await params;
+  const sp = await searchParams;
   await requireUser();
   await assertTenantAccess(tenant);
 
+  const days = sp.d === "7" ? 7 : sp.d === "90" ? 90 : 30;
   const supabase = await createSupabaseServerClient();
   const now = Date.now();
-  const sinceDate = new Date(now - 29 * 864e5);
+  const sinceDate = new Date(now - (days - 1) * 864e5);
   const since30 = sinceDate.toISOString();
   const ymd = (d: Date) => d.toISOString().slice(0, 10);
   const sinceYmd = ymd(sinceDate);
@@ -90,9 +98,9 @@ export default async function DashboardPage({ params }: { params: Promise<{ tena
 
   const spend30 = campaigns.reduce((s, c) => s + c.spend, 0);
 
-  // Eixo do tempo (30 dias) e séries.
+  // Eixo do tempo e séries.
   const dayLabels: string[] = [];
-  for (let i = 29; i >= 0; i--) dayLabels.push(ymd(new Date(now - i * 864e5)));
+  for (let i = days - 1; i >= 0; i--) dayLabels.push(ymd(new Date(now - i * 864e5)));
 
   const leadsByDay = new Map<string, number>();
   for (const l of leadDays ?? []) {
@@ -127,10 +135,25 @@ export default async function DashboardPage({ params }: { params: Promise<{ tena
 
   return (
     <main className="mx-auto max-w-5xl space-y-8 p-8">
-      <h1 className="text-xl font-semibold">Dashboard</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-semibold">Dashboard</h1>
+        <div className="flex gap-1 text-sm">
+          {[7, 30, 90].map((d) => (
+            <Link
+              key={d}
+              href={`?d=${d}`}
+              className={`rounded-lg px-3 py-1.5 ${
+                days === d ? "bg-neutral-900 text-white" : "border bg-white text-neutral-600 hover:bg-neutral-50"
+              }`}
+            >
+              {d}d
+            </Link>
+          ))}
+        </div>
+      </div>
 
       <section className="grid grid-cols-2 gap-4 md:grid-cols-4">
-        <Card label="Leads (total)" value={leads ?? 0} sub={`${leads30 ?? 0} nos últimos 30 dias`} />
+        <Card label="Leads (total)" value={leads ?? 0} sub={`${leads30 ?? 0} nos últimos ${days} dias`} />
         <Card label="Conversões atribuídas" value={conversions ?? 0} accent="text-emerald-600" sub="WhatsApp + vendas" />
         <Card label="Compras" value={purchases ?? 0} sub="Nuvemshop + WhatsApp" />
         <Card label="Gasto Meta (30d)" value={money(spend30)} />
