@@ -12,6 +12,7 @@ interface LeadRow {
   phone: string | null;
   email: string | null;
   created_at: string;
+  last_seen_at: string | null;
   device_type: string | null;
   os: string | null;
   browser: string | null;
@@ -30,9 +31,9 @@ export default async function LeadsPage({ params }: { params: Promise<{ tenant: 
   const supabase = await createSupabaseServerClient();
   const { data } = await supabase
     .from("lead")
-    .select("id, tracking_code, phone, email, created_at, device_type, os, browser, city, country")
+    .select("id, tracking_code, phone, email, created_at, last_seen_at, device_type, os, browser, city, country")
     .eq("tenant_id", tenant)
-    .order("created_at", { ascending: false })
+    .order("last_seen_at", { ascending: false, nullsFirst: false })
     .limit(100);
   const leads = (data ?? []) as LeadRow[];
 
@@ -70,7 +71,7 @@ export default async function LeadsPage({ params }: { params: Promise<{ tenant: 
             <th>Dispositivo</th>
             <th>Local</th>
             <th>Telefone</th>
-            <th>Criado em</th>
+            <th>Última visita</th>
           </tr>
         </thead>
         <tbody>
@@ -103,7 +104,12 @@ export default async function LeadsPage({ params }: { params: Promise<{ tenant: 
               </td>
               <td>{[l.city, l.country].filter(Boolean).join(", ") || "—"}</td>
               <td>{l.phone ?? "—"}</td>
-              <td>{fmtDateTime(l.created_at)}</td>
+              <td>
+                {fmtDateTime(l.last_seen_at ?? l.created_at)}
+                <span className="block text-[10px] text-neutral-400">
+                  1º acesso: {fmtDateTime(l.created_at, { day: "2-digit", month: "2-digit" })}
+                </span>
+              </td>
             </tr>
           ))}
           {leads.length === 0 && (

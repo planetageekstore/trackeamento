@@ -19,11 +19,12 @@ export async function ingestEvents(
 ): Promise<void> {
   const supabase = createSupabaseServiceClient();
 
-  // 1) Upsert do lead (FR-001/FR-005)
+  // 1) Upsert do lead (FR-001/FR-005). last_seen_at sobe a cada acesso — assim
+  // o lead recorrente (mesmo TRK) volta pro topo da lista.
   const { data: lead, error: leadErr } = await supabase
     .from("lead")
     .upsert(
-      { tenant_id: tenantId, tracking_code: trackingCode },
+      { tenant_id: tenantId, tracking_code: trackingCode, last_seen_at: new Date().toISOString() },
       { onConflict: "tenant_id,tracking_code" },
     )
     .select("id")

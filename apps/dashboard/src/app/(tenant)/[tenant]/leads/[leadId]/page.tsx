@@ -25,7 +25,7 @@ export default async function LeadDetailPage({
   const { data: lead } = await supabase
     .from("lead")
     .select(
-      "tracking_code, name, phone, email, created_at, device_type, os, browser, screen, language, timezone, city, region, country",
+      "tracking_code, name, phone, email, created_at, last_seen_at, device_type, os, browser, screen, language, timezone, city, region, country",
     )
     .eq("id", leadId)
     .maybeSingle();
@@ -98,6 +98,18 @@ export default async function LeadDetailPage({
     }),
   ].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
 
+  // Agrupa a jornada por DIA (sessões acessadas), fuso de São Paulo. Dias mais
+  // recentes primeiro; dentro do dia, ordem cronológica.
+  const dayKey = (iso: string) => new Date(iso).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+  const byDay = new Map<string, JourneyItem[]>();
+  for (const j of journey) {
+    const k = dayKey(j.at);
+    if (!byDay.has(k)) byDay.set(k, []);
+    byDay.get(k)!.push(j);
+  }
+  const todayKey = dayKey(new Date().toISOString());
+  const daysDesc = [...byDay.keys()].sort((a, b) => b.localeCompare(a));
+
   return (
     <main className="mx-auto max-w-4xl space-y-6 p-8">
       <div className="flex items-start justify-between gap-4">
@@ -107,6 +119,14 @@ export default async function LeadDetailPage({
           <p className="text-sm text-neutral-500">
             {lead?.phone ?? "sem telefone"} · {lead?.email ?? "sem e-mail"}
           </p>
+          {lead && (
+            <p className="mt-1 text-xs text-neutral-400">
+              1º acesso: {fmtDateTime(lead.created_at)}
+              {lead.last_seen_at && ` · última visita: ${fmtDateTime(lead.last_seen_at)}`}
+              {" · "}
+              {byDay.size} {byDay.size === 1 ? "dia" : "dias"} de acesso
+            </p>
+          )}
         </div>
 
         {/* Anúncio de origem (tráfego pago Meta) */}
@@ -158,22 +178,52 @@ export default async function LeadDetailPage({
         </div>
       )}
 
-      <ol className="space-y-2">
-        {journey.map((j, i) => (
-          <li key={i} className="flex items-start gap-3 rounded border bg-white p-3 text-sm">
-            <span
-              className={`mt-0.5 inline-block rounded px-2 py-0.5 text-xs ${
-                j.kind === "click" ? "bg-blue-100 text-blue-700" : "bg-emerald-100 text-emerald-700"
-              }`}
-            >
-              {j.label}
-            </span>
-            <span className="flex-1 text-neutral-600">{j.detail}</span>
-            <time className="text-xs text-neutral-400">{fmtDateTime(j.at)}</time>
-          </li>
-        ))}
-        {journey.length === 0 && <li className="text-sm text-neutral-500">Jornada vazia.</li>}
-      </ol>
+      {journey.length === 0 ? (
+        <p className="text-sm text-neutral-500">Jornada vazia.</p>
+      ) : (
+        <div className="space-y-5">
+          {daysDesc.map((day) => {
+            const items = byDay.get(day)!;
+            const label = new Date(items[0]!.at).toLocaleDateString("pt-BR", {
+              timeZone: "America/Sao_Paulo",
+              day: "2-digit",
+              month: "2-digit",
+              year: "numeric",
+              weekday: "short",
+            });
+            return (
+              <section key={day}>
+                <div className="mb-2 flex items-center gap-2">
+                  <span className="rounded-full bg-neutral-900 px-3 py-0.5 text-xs font-medium text-white">
+                    {day === todayKey ? "Hoje" : label}
+                  </span>
+                  <span className="text-xs text-neutral-400">
+                    {items.length} {items.length === 1 ? "evento" : "eventos"}
+                  </span>
+                  <span className="h-px flex-1 bg-neutral-100" />
+                </div>
+                <ol className="space-y-2">
+                  {items.map((j, i) => (
+                    <li key={i} className="flex items-start gap-3 rounded border bg-white p-3 text-sm">
+                      <span
+                        className={`mt-0.5 inline-block rounded px-2 py-0.5 text-xs ${
+                          j.kind === "click" ? "bg-blue-100 text-blue-700" : "bg-emerald-100 text-emerald-700"
+                        }`}
+                      >
+                        {j.label}
+                      </span>
+                      <span className="flex-1 break-all text-neutral-600">{j.detail}</span>
+                      <time className="shrink-0 text-xs text-neutral-400">
+                        {fmtDateTime(j.at, { hour: "2-digit", minute: "2-digit" })}
+                      </time>
+                    </li>
+                  ))}
+                </ol>
+              </section>
+            );
+          })}
+        </div>
+      )}
     </main>
   );
 }
