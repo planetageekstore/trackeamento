@@ -2,8 +2,23 @@ import { requireUser, assertTenantAccess } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getAdCreative } from "@/server/integrations/meta";
 import { fmtDateTime } from "@/lib/date";
+import { reanalisarLead } from "./actions";
 
 export const dynamic = "force-dynamic";
+
+const STAGE_LABEL: Record<string, string> = {
+  novo: "Novo",
+  em_conversa: "Em conversa",
+  followup: "Follow-up",
+  negociacao: "Negociação",
+  comprou: "Comprou",
+  perdido: "Perdido",
+};
+const TEMP_BADGE: Record<string, { icon: string; cls: string }> = {
+  quente: { icon: "🔥 Quente", cls: "bg-red-100 text-red-700" },
+  morno: { icon: "🌡 Morno", cls: "bg-amber-100 text-amber-700" },
+  frio: { icon: "❄ Frio", cls: "bg-sky-100 text-sky-700" },
+};
 
 interface JourneyItem {
   kind: "click" | "event";
@@ -25,10 +40,19 @@ export default async function LeadDetailPage({
   const { data: lead } = await supabase
     .from("lead")
     .select(
-      "tracking_code, name, phone, email, created_at, last_seen_at, device_type, os, browser, screen, language, timezone, city, region, country",
+      "tracking_code, name, phone, email, created_at, last_seen_at, device_type, os, browser, screen, language, timezone, city, region, country, stage, temperature",
     )
     .eq("id", leadId)
     .maybeSingle();
+
+  const { data: qual } = await supabase
+    .from("lead_qualification")
+    .select("stage, temperature, purchase_detected, followup, summary, confidence, analyzed_at")
+    .eq("lead_id", leadId)
+    .order("analyzed_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const followup = (qual?.followup as { recomendado?: boolean; sugestao?: string } | null) ?? null;
 
   const sessionRows: { label: string; value: string | null }[] = [
     { label: "Dispositivo", value: lead?.device_type ?? null },
@@ -162,6 +186,54 @@ export default async function LeadDetailPage({
             <p className="mt-1 text-neutral-400">Provável: campanha TRAFEGO P/ PERFIL.</p>
           </div>
         ) : null}
+      </div>
+
+      {/* Qualificação por IA (F8) */}
+      <div className="rounded-lg border bg-white p-4">
+        <div className="mb-2 flex items-center justify-between">
+          <h2 className="text-sm font-medium text-neutral-700">Qualificação (IA)</h2>
+          <form action={reanalisarLead}>
+            <input type="hidden" name="tenantId" value={tenant} />
+            <input type="hidden" name="leadId" value={leadId} />
+            <button className="rounded-md border px-2 py-1 text-xs text-neutral-600 hover:bg-neutral-50">
+              🔄 Reanalisar
+            </button>
+          </form>
+        </div>
+        {qual ? (
+          <div className="space-y-2 text-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-neutral-900 px-2.5 py-0.5 text-xs font-medium text-white">
+                {STAGE_LABEL[String(qual.stage)] ?? String(qual.stage)}
+              </span>
+              {TEMP_BADGE[String(qual.temperature)] && (
+                <span className={`rounded-full px-2.5 py-0.5 text-xs ${TEMP_BADGE[String(qual.temperature)]!.cls}`}>
+                  {TEMP_BADGE[String(qual.temperature)]!.icon}
+                </span>
+              )}
+              {qual.purchase_detected && (
+                <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs text-emerald-700">🛒 Compra detectada</span>
+              )}
+              <span className="text-xs text-neutral-400">
+                confiança {Math.round(Number(qual.confidence) * 100)}%
+              </span>
+            </div>
+            {qual.summary && <p className="text-neutral-600">{qual.summary}</p>}
+            {followup?.recomendado && followup.sugestao && (
+              <div className="rounded-lg border border-blue-100 bg-blue-50 p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-blue-700">Follow-up sugerido</p>
+                <p className="mt-1 text-sm text-neutral-700">{followup.sugestao}</p>
+              </div>
+            )}
+            <p className="text-[10px] text-neutral-400">
+              Analisado em {fmtDateTime(qual.analyzed_at as string)}
+            </p>
+          </div>
+        ) : (
+          <p className="text-sm text-neutral-400">
+            Ainda sem qualificação. O lead precisa ter conversa de WhatsApp recebida — clique em “Reanalisar”.
+          </p>
+        )}
       </div>
 
       {sessionRows.length > 0 && (

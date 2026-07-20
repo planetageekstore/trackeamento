@@ -37,6 +37,12 @@ export async function ingestEvents(
   // (device_type null). Visitas seguintes não sobrescrevem a primeira sessão.
   if (session && Object.values(session).some(Boolean)) {
     await supabase.from("lead").update(session).eq("id", leadId).is("device_type", null);
+    // O client_id do GA4 (_ga) pode só aparecer numa visita posterior (gtag
+    // carrega depois). Grava quando presente e ainda nulo, independente do
+    // first-touch — é o elo com a sessão web p/ o envio server-side (GA4).
+    if (session.ga_client_id) {
+      await supabase.from("lead").update({ ga_client_id: session.ga_client_id }).eq("id", leadId).is("ga_client_id", null);
+    }
   }
 
   for (const ev of events) {

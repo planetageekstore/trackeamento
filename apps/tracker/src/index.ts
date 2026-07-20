@@ -46,7 +46,8 @@ declare global {
     }
 
     // Contexto do cliente para enriquecer o lead (tela/idioma/fuso). Dispositivo
-    // e geo são derivados no servidor (User-Agent + IP), não aqui.
+    // e geo são derivados no servidor (User-Agent + IP), não aqui. `ga` é o
+    // client_id do cookie _ga do GA4 (elo com a sessão web p/ o envio server-side).
     let ctx: Record<string, string> = {};
     try {
       ctx = {
@@ -54,6 +55,8 @@ declare global {
         lang: navigator.language,
         tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
       };
+      const ga = /_ga=GA\d\.\d\.(\d+\.\d+)/.exec(document.cookie);
+      if (ga) ctx.ga = ga[1]!;
     } catch {
       /* silencioso */
     }

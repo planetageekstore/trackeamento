@@ -12,6 +12,7 @@ export interface LeadSession {
   country: string | null;
   region: string | null;
   city: string | null;
+  ga_client_id: string | null;
 }
 
 const BOT_RE =
@@ -70,7 +71,7 @@ function h(req: NextRequest, name: string, decode = false): string | null {
  */
 export function buildLeadSession(
   req: NextRequest,
-  ctx: { screen?: unknown; lang?: unknown; tz?: unknown } | undefined,
+  ctx: { screen?: unknown; lang?: unknown; tz?: unknown; ga?: unknown } | undefined,
 ): LeadSession {
   const { device_type, os, browser } = parseUserAgent(req.headers.get("user-agent"));
   const str = (v: unknown): string | null =>
@@ -85,5 +86,6 @@ export function buildLeadSession(
     country: h(req, "x-vercel-ip-country"),
     region: h(req, "x-vercel-ip-country-region"),
     city: h(req, "x-vercel-ip-city", true),
+    ga_client_id: str(ctx?.ga),
   };
 }

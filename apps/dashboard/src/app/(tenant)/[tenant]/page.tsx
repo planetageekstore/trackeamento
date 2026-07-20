@@ -134,7 +134,7 @@ export default async function DashboardPage({
   const costPerBio = profileCampaign && bio > 0 ? profileCampaign.spend / bio : null;
 
   return (
-    <main className="mx-auto max-w-5xl space-y-8 p-8">
+    <main className="mx-auto max-w-7xl space-y-8 p-8">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Dashboard</h1>
         <div className="flex gap-1 text-sm">
@@ -160,15 +160,15 @@ export default async function DashboardPage({
       </section>
 
       {/* Evolução */}
-      <section className="grid gap-6 md:grid-cols-2">
+      <section className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-xl border bg-white p-5">
-          <h2 className="mb-3 text-sm font-medium text-neutral-700">Evolução de leads (30d)</h2>
-          <TrendChart labels={dayLabels} series={leadsSeries} />
+          <h2 className="mb-3 text-sm font-medium text-neutral-700">Evolução de leads ({days}d)</h2>
+          <TrendChart labels={dayLabels} series={leadsSeries} title={`Evolução de leads (${days}d)`} />
         </div>
         <div className="rounded-xl border bg-white p-5">
-          <h2 className="mb-3 text-sm font-medium text-neutral-700">Gasto por campanha (30d)</h2>
+          <h2 className="mb-3 text-sm font-medium text-neutral-700">Gasto por campanha ({days}d)</h2>
           {spendSeries.length > 0 ? (
-            <TrendChart labels={dayLabels} series={spendSeries} prefix="R$ " />
+            <TrendChart labels={dayLabels} series={spendSeries} prefix="R$ " title={`Gasto por campanha (${days}d)`} />
           ) : (
             <p className="text-sm text-neutral-400">Sem dados de anúncios no período.</p>
           )}

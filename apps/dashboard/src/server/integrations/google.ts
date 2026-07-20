@@ -164,3 +164,68 @@ export async function importGoogleCosts(tenantId: string): Promise<number> {
   }
   return rows.length;
 }
+
+/**
+ * Envia UMA conversão offline (Offline Click Conversion) ao Google Ads.
+ * Requer gclid + uma Conversion Action escolhida. Formato de data com offset.
+ */
+export async function uploadGoogleOfflineConversion(
+  tenantId: string,
+  gclid: string,
+  conversionAction: string,
+  value: number,
+  currency: string,
+  conversionDateTime: string,
+): Promise<{ ok: boolean; error?: string; needsReconnect?: boolean }> {
+  const supabase = createSupabaseServiceClient();
+  const { data: integ } = await supabase
+    .from("integration")
+    .select("refresh_token_enc, account_ref")
+    .eq("tenant_id", tenantId)
+    .eq("provider", "google")
+    .maybeSingle();
+  if (!integ?.account_ref || !integ.refresh_token_enc) return { ok: false, error: "Google não conectado" };
+  const creds = await getGoogleCreds(tenantId);
+  if (!creds) return { ok: false, error: "Credenciais Google ausentes" };
+
+  const refreshToken = await decryptSecret(integ.refresh_token_enc as string);
+  const access = await refreshAccessToken(refreshToken, creds.clientId, creds.clientSecret);
+
+  const res = await fetch(`${ADS_API}/customers/${integ.account_ref}:uploadClickConversions`, {
+    method: "POST",
+    headers: adsHeaders(access),
+    body: JSON.stringify({
+      conversions: [
+        {
+          gclid,
+          conversionAction,
+          conversionDateTime,
+          conversionValue: value,
+          currencyCode: currency,
+        },
+      ],
+      partialFailure: true,
+    }),
+  });
+  const json = (await res.json().catch(() => ({}))) as {
+    error?: { message?: string };
+    partialFailureError?: { message?: string };
+  };
+  if (!res.ok) {
+    return { ok: false, error: json.error?.message ?? `HTTP ${res.status}`, needsReconnect: res.status === 401 };
+  }
+  if (json.partialFailureError) return { ok: false, error: json.partialFailureError.message ?? "partial failure" };
+  return { ok: true };
+}
+
+/** Formata um timestamp ISO no formato exigido pelo Google Ads (com offset -03:00). */
+export function googleConversionDateTime(iso: string): string {
+  const d = new Date(iso);
+  // Converte para America/Sao_Paulo (-03:00) de forma simples.
+  const sp = new Date(d.getTime() - 3 * 3600 * 1000);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return (
+    `${sp.getUTCFullYear()}-${p(sp.getUTCMonth() + 1)}-${p(sp.getUTCDate())} ` +
+    `${p(sp.getUTCHours())}:${p(sp.getUTCMinutes())}:${p(sp.getUTCSeconds())}-03:00`
+  );
+}

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { TenantSwitcher, type TenantOption } from "@/components/TenantSwitcher";
 
 interface Item {
   label: string;
@@ -11,13 +12,16 @@ interface Item {
   exact?: boolean;
 }
 
-export function Sidebar({ tenant, tenantName }: { tenant: string; tenantName: string }) {
+export function Sidebar({ tenant, tenants }: { tenant: string; tenants: TenantOption[] }) {
   const pathname = usePathname();
   const router = useRouter();
 
   const items: Item[] = [
     { label: "Dashboard", href: `/${tenant}`, icon: "📊", exact: true },
+    { label: "Chat IA", href: `/${tenant}/chat`, icon: "💬" },
     { label: "Leads", href: `/${tenant}/leads`, icon: "👥" },
+    { label: "CRM", href: `/${tenant}/crm`, icon: "📋" },
+    { label: "Análise", href: `/${tenant}/analise`, icon: "📈" },
     { label: "Conversões", href: `/${tenant}/conversions`, icon: "🎯" },
     { label: "Campanhas", href: `/${tenant}/campaigns`, icon: "📣" },
     { label: "Engenheiro de Oferta", href: `/${tenant}/oferta`, icon: "🧠" },
@@ -37,10 +41,7 @@ export function Sidebar({ tenant, tenantName }: { tenant: string; tenantName: st
 
   return (
     <aside className="flex w-60 shrink-0 flex-col border-r bg-white">
-      <div className="border-b p-4">
-        <p className="text-xs uppercase tracking-wide text-neutral-400">Cliente</p>
-        <p className="truncate font-semibold">{tenantName}</p>
-      </div>
+      <TenantSwitcher tenant={tenant} tenants={tenants} />
 
       <nav className="flex-1 space-y-1 p-3">
         {items.map((it) => (
@@ -58,9 +59,6 @@ export function Sidebar({ tenant, tenantName }: { tenant: string; tenantName: st
       </nav>
 
       <div className="space-y-1 border-t p-3 text-sm">
-        <Link href="/tenants" className="block rounded-lg px-3 py-2 text-neutral-600 hover:bg-neutral-100">
-          ↔ Trocar cliente
-        </Link>
         <Link href="/settings" className="block rounded-lg px-3 py-2 text-neutral-600 hover:bg-neutral-100">
           🔑 Credenciais
         </Link>

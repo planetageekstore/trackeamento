@@ -49,7 +49,7 @@ export async function POST(req: NextRequest): Promise<Response> {
   // Sessão first-touch: dispositivo (User-Agent) + geo (headers Vercel) +
   // contexto do cliente (tela/idioma/fuso) que veio no PAGE_VIEW.
   const pv = events.find((e) => e.type === "PAGE_VIEW");
-  const ctx = (pv?.data as { ctx?: { screen?: unknown; lang?: unknown; tz?: unknown } } | undefined)?.ctx;
+  const ctx = (pv?.data as { ctx?: { screen?: unknown; lang?: unknown; tz?: unknown; ga?: unknown } } | undefined)?.ctx;
   const session = buildLeadSession(req, ctx);
 
   try {

@@ -239,11 +239,20 @@ export interface AdRow {
   spend: number;
   impressions: number;
   clicks: number;
+  reach: number;
+  frequency: number;
+  ctr: number;
+  cpc: number;
+  cpm: number;
+  results: number;
+  revenue: number;
+  roas: number;
 }
 
 /**
  * Relatório de anúncios (criativos) de uma conta no período: campanha → conjunto
- * → anúncio, com miniatura do criativo e métricas. Puxa ao vivo da Graph API.
+ * → anúncio, com miniatura do criativo e métricas completas. Puxa ao vivo da
+ * Graph API (metadados dos anúncios + insights por anúncio).
  */
 export async function getAdsReport(
   tenantId: string,
@@ -286,6 +295,14 @@ export async function getAdsReport(
         spend: 0,
         impressions: 0,
         clicks: 0,
+        reach: 0,
+        frequency: 0,
+        ctr: 0,
+        cpc: 0,
+        cpm: 0,
+        results: 0,
+        revenue: 0,
+        roas: 0,
       });
     }
     adsUrl = j.paging?.next ?? null;
@@ -294,29 +311,129 @@ export async function getAdsReport(
   // 2) Insights por anúncio no período → mescla métricas
   const tr = encodeURIComponent(JSON.stringify({ since, until }));
   let insUrl: string | null =
-    `${GRAPH()}/act_${acc}/insights?level=ad&fields=ad_id,spend,impressions,clicks` +
-    `&time_range=${tr}&limit=500&access_token=${t.token}`;
+    `${GRAPH()}/act_${acc}/insights?level=ad&fields=ad_id,spend,impressions,clicks,reach,frequency,` +
+    `ctr,cpc,cpm,actions,action_values,purchase_roas&time_range=${tr}&limit=500&access_token=${t.token}`;
   for (let p = 0; insUrl && p < 10; p++) {
     const r: Response = await fetch(insUrl);
     if (!r.ok) break;
-    const j = (await r.json()) as {
-      data?: Array<{ ad_id: string; spend?: string; impressions?: string; clicks?: string }>;
-      paging?: { next?: string };
-    };
+    const j = (await r.json()) as { data?: Array<Record<string, unknown>>; paging?: { next?: string } };
     for (const row of j.data ?? []) {
-      const a = ads.get(row.ad_id);
-      if (a) {
-        a.spend += Number(row.spend ?? 0);
-        a.impressions += Number(row.impressions ?? 0);
-        a.clicks += Number(row.clicks ?? 0);
-      }
+      const a = ads.get(row.ad_id as string);
+      if (!a) continue;
+      a.spend += Number(row.spend ?? 0);
+      a.impressions += Number(row.impressions ?? 0);
+      a.clicks += Number(row.clicks ?? 0);
+      a.reach += Number(row.reach ?? 0);
+      a.frequency = Number(row.frequency ?? a.frequency);
+      a.ctr = Number(row.ctr ?? a.ctr);
+      a.cpc = Number(row.cpc ?? a.cpc);
+      a.cpm = Number(row.cpm ?? a.cpm);
+      a.results += sumActions(row.actions as MetaAction[] | undefined, RESULT_TYPES);
+      a.revenue += sumActions(row.action_values as MetaAction[] | undefined, ["purchase"]);
+      const roasArr = row.purchase_roas as MetaAction[] | undefined;
+      if (roasArr?.[0]?.value) a.roas = Number(roasArr[0]!.value);
     }
     insUrl = j.paging?.next ?? null;
   }
+  for (const a of ads.values()) if (a.roas === 0 && a.spend > 0) a.roas = a.revenue / a.spend;
 
   return [...ads.values()].sort(
     (x, y) => x.campaign.localeCompare(y.campaign) || x.adset.localeCompare(y.adset),
   );
+}
+
+/**
+ * Métricas por CONJUNTO de anúncios (adset) no período, com campanha pai e
+ * status. Mesmo padrão do getCampaignsInsights (metadados + insights).
+ */
+export async function getAdsetsInsights(
+  tenantId: string,
+  accountId: string | null,
+  since: string,
+  until: string,
+): Promise<CampaignMetrics[]> {
+  const t = await metaToken(tenantId);
+  if (!t) return [];
+  const acc = (accountId || t.accountRef || "").replace(/^act_/, "");
+  if (!acc) return [];
+
+  // Metadados (status + nome da campanha pai) por conjunto.
+  const meta = new Map<string, { status?: string; name?: string; campaign?: string }>();
+  let metaUrl: string | null =
+    `${GRAPH()}/act_${acc}/adsets?fields=id,name,effective_status,campaign{name}&limit=300&access_token=${t.token}`;
+  for (let p = 0; metaUrl && p < 5; p++) {
+    const r: Response = await fetch(metaUrl);
+    if (!r.ok) break;
+    const j = (await r.json()) as {
+      data?: Array<{ id: string; name?: string; effective_status?: string; campaign?: { name?: string } }>;
+      paging?: { next?: string };
+    };
+    for (const a of j.data ?? [])
+      meta.set(a.id, { status: a.effective_status, name: a.name, campaign: a.campaign?.name });
+    metaUrl = j.paging?.next ?? null;
+  }
+
+  const tr = encodeURIComponent(JSON.stringify({ since, until }));
+  const res = await fetch(
+    `${GRAPH()}/act_${acc}/insights?level=adset&fields=adset_id,adset_name,campaign_name,spend,impressions,` +
+      `clicks,reach,ctr,cpc,cpm,frequency,inline_link_clicks,actions,action_values,purchase_roas` +
+      `&time_range=${tr}&limit=500&access_token=${t.token}`,
+  );
+  if (!res.ok) return [];
+  const j = (await res.json()) as { data?: Array<Record<string, unknown>> };
+  return (j.data ?? []).map((r) => {
+    const id = r.adset_id as string;
+    const m = meta.get(id) ?? {};
+    const spend = Number(r.spend ?? 0);
+    const revenue = sumActions(r.action_values as MetaAction[] | undefined, ["purchase"]);
+    const roasArr = r.purchase_roas as MetaAction[] | undefined;
+    const roas = roasArr?.[0]?.value ? Number(roasArr[0]!.value) : spend > 0 ? revenue / spend : 0;
+    return {
+      id,
+      name: (r.adset_name as string) ?? m.name ?? id,
+      objective: m.campaign ?? null, // reaproveita o campo p/ mostrar a campanha pai
+      status: m.status ?? null,
+      spend,
+      impressions: Number(r.impressions ?? 0),
+      clicks: Number(r.clicks ?? 0),
+      reach: Number(r.reach ?? 0),
+      ctr: Number(r.ctr ?? 0),
+      cpc: Number(r.cpc ?? 0),
+      cpm: Number(r.cpm ?? 0),
+      frequency: Number(r.frequency ?? 0),
+      linkClicks: Number(r.inline_link_clicks ?? 0),
+      results: sumActions(r.actions as MetaAction[] | undefined, RESULT_TYPES),
+      revenue,
+      roas,
+    };
+  });
+}
+
+/**
+ * Pausa ou reativa um objeto de anúncio (campanha, conjunto ou anúncio) na Meta.
+ * Ação de ESCRITA — requer token com escopo `ads_management`. Retorna erro claro
+ * se o token for somente leitura.
+ */
+export async function setAdObjectStatus(
+  tenantId: string,
+  objectId: string,
+  status: "ACTIVE" | "PAUSED",
+): Promise<{ ok: boolean; error?: string }> {
+  const t = await metaToken(tenantId);
+  if (!t) return { ok: false, error: "Meta não conectado." };
+  if (!/^\d{5,}$/.test(objectId)) return { ok: false, error: "ID inválido." };
+  const res = await fetch(`${GRAPH()}/${objectId}`, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ status, access_token: t.token }),
+  });
+  if (!res.ok) {
+    const j = (await res.json().catch(() => ({}))) as { error?: { message?: string; code?: number } };
+    const msg = j.error?.message ?? `HTTP ${res.status}`;
+    // 200/10/294 ~ permissão insuficiente (token somente leitura).
+    return { ok: false, error: msg };
+  }
+  return { ok: true };
 }
 
 export interface CampaignMetrics {
