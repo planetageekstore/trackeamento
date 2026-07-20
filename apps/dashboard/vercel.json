@@ -1,7 +1,6 @@
 {
   "crons": [
     { "path": "/api/cron/sync-orders", "schedule": "0 3 * * *" },
-    { "path": "/api/cron/qualify-leads", "schedule": "0 */2 * * *" },
-    { "path": "/api/cron/dispatch-conversions", "schedule": "*/30 * * * *" }
+    { "path": "/api/cron/daily", "schedule": "0 4 * * *" }
   ]
 }
