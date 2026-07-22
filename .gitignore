@@ -10,8 +10,12 @@ out/
 apps/tracker/dist/
 *.tsbuildinfo
 
-# Agent tooling (instalado por máquina; não faz parte do app)
-.claude/
+# Agent tooling (instalado por máquina; não faz parte do app).
+# Exceção: skills próprias são conhecimento do time e ficam versionadas.
+.claude/*
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/andromeda/
 
 # Env & secrets
 .env
