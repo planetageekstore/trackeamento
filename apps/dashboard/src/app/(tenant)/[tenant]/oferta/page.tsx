@@ -2,16 +2,18 @@ import Link from "next/link";
 import { requireUser, assertTenantAccess } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { fmtDateTime } from "@/lib/date";
-import { GSO_BLOCKS, loadLibrary } from "@/server/offerV2";
+import { GSO_BLOCKS, loadLibrary, CONTENT_LEVELS, CONTENT_TYPES, CONTENT_PRODUCTIONS } from "@/server/offerV2";
 import { EngineerChat } from "./EngineerChat";
-import { criarGso, regenerarGsoBloco, gerarAdCopy, adicionarNota, removerNota } from "./actions";
+import { criarGso, regenerarGsoBloco, gerarAdCopy, gerarCopyConteudo, adicionarNota, removerNota } from "./actions";
 
 export const dynamic = "force-dynamic";
 
-type Tab = "engenheiro" | "copy" | "gso" | "biblioteca";
+type Tab = "engenheiro" | "copy" | "conteudo" | "gso" | "biblioteca";
 
 const FRAMEWORKS = ["AIDA", "PAS", "BAB", "FAB", "4 Ps", "Gatilhos mentais", "5 estágios de consciência", "Sofisticação de mercado", "Storytelling"];
 const PLATFORMS = ["Meta Ads", "Google Ads", "TikTok", "Orgânico"];
+const FORMATOS = ["Vídeo", "Estático", "Carrossel"];
+const DURACOES = ["6-15s (scroll-stopper)", "15-40s", "40-90s", "90-180s (VSL/storytelling)"];
 
 function TabNav({ tenant, tab }: { tenant: string; tab: Tab }) {
   const item = (key: Tab, label: string) => (
@@ -28,6 +30,7 @@ function TabNav({ tenant, tab }: { tenant: string; tab: Tab }) {
     <div className="flex flex-wrap gap-1 rounded-xl border bg-white p-1">
       {item("engenheiro", "💬 Engenheiro")}
       {item("copy", "✍️ Copy de Anúncio")}
+      {item("conteudo", "🎬 Copy de Conteúdo")}
       {item("gso", "🎯 Grand Slam Offer")}
       {item("biblioteca", "📚 Biblioteca")}
     </div>
@@ -55,13 +58,14 @@ export default async function OfertaPage({
   await requireUser();
   await assertTenantAccess(tenant);
 
-  const tab = (["engenheiro", "copy", "gso", "biblioteca"].includes(sp.tab ?? "") ? sp.tab : "engenheiro") as Tab;
+  const tab = (["engenheiro", "copy", "conteudo", "gso", "biblioteca"].includes(sp.tab ?? "") ? sp.tab : "engenheiro") as Tab;
 
   const supabase = await createSupabaseServerClient();
-  const [{ data: tenantRow }, { data: gso }, { data: adCopy }, library] = await Promise.all([
+  const [{ data: tenantRow }, { data: gso }, { data: adCopy }, { data: content }, library] = await Promise.all([
     supabase.from("tenant").select("name").eq("id", tenant).maybeSingle(),
     supabase.from("oferta").select("id, output_md, blocks, model, created_at").eq("tenant_id", tenant).eq("kind", "gso").order("created_at", { ascending: false }).limit(1).maybeSingle(),
     supabase.from("oferta").select("id, output_md, model, created_at").eq("tenant_id", tenant).eq("kind", "ad_copy").order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    supabase.from("oferta").select("id, output_md, model, created_at").eq("tenant_id", tenant).eq("kind", "content").order("created_at", { ascending: false }).limit(1).maybeSingle(),
     loadLibrary(tenant),
   ]);
   const tenantName = (tenantRow?.name as string) ?? "Cliente";
@@ -178,6 +182,100 @@ export default async function OfertaPage({
                 <span className="text-xs text-neutral-400">{fmtDateTime(adCopy.created_at as string)}</span>
               </div>
               <p className="whitespace-pre-wrap text-sm leading-relaxed text-neutral-700">{adCopy.output_md as string}</p>
+            </section>
+          )}
+        </div>
+      )}
+
+      {tab === "conteudo" && (
+        <div className="space-y-6">
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-neutral-700">
+            <p className="font-medium text-emerald-800">🎬 Roteiros de criativo — Método Andromeda</p>
+            <p className="mt-1">
+              Gera roteiros prontos para gravar, seguindo os níveis de consciência (C1/C2/C3), a anatomia do criativo e as
+              mecânicas de retenção comprovadas. Escolha <b>Enxoval completo</b> para os 9 criativos (3+3+3) de uma campanha.
+            </p>
+          </div>
+
+          <form action={gerarCopyConteudo} className="space-y-4 rounded-xl border bg-white p-5">
+            <input type="hidden" name="tenantId" value={tenant} />
+            <ContextToggle label={tenantName} />
+            <div className="grid gap-4 md:grid-cols-2">
+              <Field name="produto" label="Produto / Serviço" placeholder="Ex.: kit de Funko Pop colecionador" required />
+              <Field name="publico" label="Público-alvo" placeholder="Ex.: jovens 18–40 fãs de cultura pop" required />
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className="text-sm">
+                <span className="mb-1 block font-medium text-neutral-700">Nível de consciência</span>
+                <select name="nivel" className="w-full rounded-md border p-2 text-sm">
+                  {CONTENT_LEVELS.map((l) => (
+                    <option key={l.key} value={l.key}>
+                      {l.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-sm">
+                <span className="mb-1 block font-medium text-neutral-700">Tipo de criativo</span>
+                <select name="tipo" className="w-full rounded-md border p-2 text-sm">
+                  <option value="auto">A IA escolhe o melhor</option>
+                  {CONTENT_TYPES.map((t) => (
+                    <option key={t.key} value={t.key}>
+                      {t.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-sm">
+                <span className="mb-1 block font-medium text-neutral-700">Formato de produção</span>
+                <select name="producao" className="w-full rounded-md border p-2 text-sm">
+                  <option value="auto">A IA escolhe o melhor</option>
+                  {CONTENT_PRODUCTIONS.map((p) => (
+                    <option key={p.key} value={p.key}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-sm">
+                <span className="mb-1 block font-medium text-neutral-700">Formato</span>
+                <select name="formato" className="w-full rounded-md border p-2 text-sm">
+                  {FORMATOS.map((f) => (
+                    <option key={f} value={f}>
+                      {f}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-sm">
+                <span className="mb-1 block font-medium text-neutral-700">Duração alvo (vídeo)</span>
+                <select name="duracao" className="w-full rounded-md border p-2 text-sm">
+                  <option value="">—</option>
+                  {DURACOES.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <Field name="oferta" label="Oferta/promoção vigente (opcional)" placeholder="Ex.: 60% off até domingo" />
+            </div>
+
+            <button className="rounded-lg bg-neutral-900 px-4 py-2 text-sm text-white">Gerar roteiros</button>
+            <p className="text-xs text-neutral-400">
+              O enxoval completo gera 9 roteiros e pode levar mais tempo. Nunca inventamos prova social ou escassez —
+              sem dado real aparece como [placeholder].
+            </p>
+          </form>
+
+          {content && (
+            <section className="rounded-xl border bg-white p-5">
+              <div className="mb-2 flex items-center justify-between">
+                <h2 className="text-sm font-medium text-neutral-700">Roteiros gerados</h2>
+                <span className="text-xs text-neutral-400">{fmtDateTime(content.created_at as string)}</span>
+              </div>
+              <p className="whitespace-pre-wrap text-sm leading-relaxed text-neutral-700">{content.output_md as string}</p>
             </section>
           )}
         </div>

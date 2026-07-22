@@ -1,6 +1,7 @@
 import "server-only";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { anthropicClient, textOf, parseBlocks, type AiBlock } from "@/server/aiBlocks";
+import { andromedaContext, ANDROMEDA_NOTES, CREATIVE_TYPES, PRODUCTION_TYPES } from "@/server/andromeda";
 
 /**
  * Engenharia de Oferta v2 (F10). Central de copy e ofertas:
@@ -30,6 +31,8 @@ export const DEFAULT_NOTES: CopyNote[] = [
   { title: "Headline de Halbert", content: "Venda a solução para um problema urgente. Especificidade e benefício claro vencem criatividade vazia.", tags: ["halbert", "headline"] },
   { title: "Regra 80/20 emoção/lógica", content: "80% emoção para gerar desejo, 20% lógica para justificar a compra racionalmente.", tags: ["principio"] },
   { title: "Risco reverso (garantia)", content: "Transfira o risco da decisão para você. 'Se não amar, devolvo 100%.' Garantia nomeada e incondicional aumenta conversão.", tags: ["garantia", "oferta"] },
+  // Método Andromeda (criativos e funil no Meta Ads).
+  ...ANDROMEDA_NOTES,
 ];
 
 /** Notas do tenant + padrão, para exibir e alimentar o prompt. */
@@ -181,9 +184,13 @@ const PLATFORM_LIMITS: Record<string, string> = {
   "Orgânico": "Post orgânico: sem limite rígido, mas objetivo e escaneável.",
 };
 
-const AD_SYSTEM = `Você é um copywriter de anúncios de resposta direta. Gere 3 variações DISTINTAS de copy de anúncio, cada uma com headline, corpo e CTA, respeitando os limites da plataforma. Português do Brasil. Não invente prova social falsa.
+const AD_SYSTEM = `Você é um copywriter de anúncios de resposta direta formado no MÉTODO ANDROMEDA (gestão de tráfego pago no Meta). Gere 3 variações DISTINTAS de copy de anúncio, cada uma com headline, corpo e CTA, respeitando os limites da plataforma. Português do Brasil.
 
-Formato de saída: markdown com "### Variação 1/2/3" e, em cada uma, **Headline:**, **Corpo:** e **CTA:**.`;
+${andromedaContext({ levels: ["C1", "C2", "C3"], includeAnatomy: true })}
+
+Cada variação deve declarar o nível de consciência (C1/C2/C3) que ataca e usar um ângulo diferente das outras.
+
+Formato de saída: markdown com "### Variação 1/2/3 — [Nível] [Tipo]" e, em cada uma, **Headline:**, **Corpo:**, **CTA:** e **Por que funciona:** (1 linha).`;
 
 export async function generateAdCopy(inputs: AdCopyInputs, notes: CopyNote[]): Promise<{ outputMd: string; model: string }> {
   const user = [
@@ -211,6 +218,103 @@ export async function generateAdCopy(inputs: AdCopyInputs, notes: CopyNote[]): P
   return { outputMd, model: MODEL };
 }
 
+// ---- Copy de Conteúdo (roteiros de criativos — Método Andromeda) ----------
+export interface ContentCopyInputs {
+  produto: string;
+  publico: string;
+  /** C1 | C2 | C3 | enxoval (3+3+3) */
+  nivel: string;
+  /** chave de CREATIVE_TYPES, ou "auto" para a IA escolher */
+  tipo: string;
+  /** chave de PRODUCTION_TYPES, ou "auto" */
+  producao: string;
+  formato: string; // Vídeo | Estático | Carrossel
+  duracao?: string;
+  oferta?: string;
+  clientContext?: string;
+}
+
+export const CONTENT_LEVELS = [
+  { key: "enxoval", label: "Enxoval completo (3 C1 + 3 C2 + 3 C3)" },
+  { key: "C1", label: "C1 — Consciência baixa (topo/frio)" },
+  { key: "C2", label: "C2 — Consciência média (meio)" },
+  { key: "C3", label: "C3 — Consciência alta (fundo)" },
+];
+
+export const CONTENT_TYPES = CREATIVE_TYPES.map((t) => ({ key: t.key, label: `${t.label} (${t.level})`, level: t.level }));
+export const CONTENT_PRODUCTIONS = PRODUCTION_TYPES.map((p) => ({ key: p.key, label: p.label }));
+
+function contentSystem(inputs: ContentCopyInputs): string {
+  const isEnxoval = inputs.nivel === "enxoval";
+  const levels: ("C1" | "C2" | "C3")[] = isEnxoval
+    ? ["C1", "C2", "C3"]
+    : ([inputs.nivel] as ("C1" | "C2" | "C3")[]);
+  const typeKeys = inputs.tipo && inputs.tipo !== "auto" ? [inputs.tipo] : undefined;
+
+  const saida = isEnxoval
+    ? `Gere o ENXOVAL COMPLETO: 9 roteiros (3 C1 + 3 C2 + 3 C3), cada um com um TIPO diferente e ângulo diferente.
+Para CADA roteiro use este formato compacto:
+### [n] [C1|C2|C3] · [Tipo] · [Formato]
+**🎣 Gancho (0-3s):** ...
+**🎬 Roteiro:** cena a cena com marcação de tempo
+**📝 Texto na tela:** ...
+**💬 Legenda:** ...
+**📢 CTA:** ...`
+    : `Gere 3 VARIAÇÕES do criativo (ângulos diferentes entre si), cada uma no formato:
+### Variação [n] — [Tipo] · [Formato]
+**🎣 GANCHO (0-3s):** a headline/abertura que estanca o scroll
+**🎬 ROTEIRO:** cena a cena com marcação de tempo (ex.: [0-3s], [3-10s], [10-25s]), descrevendo cena, ângulo, o que aparece e o que é falado
+**📝 TEXTO NA TELA:** as legendas queimadas / textos sobrepostos
+**💬 LEGENDA DO POST:** a copy que acompanha a publicação
+**📢 CTA:** a chamada para ação
+**🧬 ANATOMIA:** quais recursos mecânicos/visuais/temáticos foram usados e por quê (2-3 linhas)`;
+
+  return `Você é um diretor de criativos formado no MÉTODO ANDROMEDA (tráfego pago no Meta). Escreve roteiros de criativos (conteúdo) prontos para gravar/produzir. Português do Brasil, linguagem do público-alvo.
+
+${andromedaContext({ levels, typeKeys, includeAnatomy: true, includeRetention: true, includeEnxoval: isEnxoval })}
+
+REGRAS:
+- O gancho dos 3 primeiros segundos é a decisão mais importante do criativo. Ele precisa ser específico e conectado à dor/oferta — nunca genérico.
+- Escolha e declare explicitamente uma MECÂNICA DE RETENÇÃO para cada roteiro.
+- Roteiro deve ser executável: diga o que aparece na tela, quem fala, o que fala e em que tempo.
+- Nunca invente prova social, número ou escassez. Sem dado real use "[placeholder: inserir dado real]".
+
+FORMATO DE SAÍDA (OBRIGATÓRIO):
+${saida}`;
+}
+
+export async function generateContentCopy(
+  inputs: ContentCopyInputs,
+  notes: CopyNote[],
+): Promise<{ outputMd: string; model: string }> {
+  const prod = PRODUCTION_TYPES.find((p) => p.key === inputs.producao);
+  const user = [
+    "Crie os roteiros de criativo para:",
+    `- Produto/Serviço: ${inputs.produto}`,
+    `- Público-alvo: ${inputs.publico}`,
+    `- Nível de consciência: ${inputs.nivel === "enxoval" ? "enxoval completo (3 C1 + 3 C2 + 3 C3)" : inputs.nivel}`,
+    inputs.tipo && inputs.tipo !== "auto" ? `- Tipo de criativo: ${CREATIVE_TYPES.find((t) => t.key === inputs.tipo)?.label}` : "- Tipo de criativo: escolha o mais adequado e justifique",
+    prod ? `- Formato de produção: ${prod.label} — ${prod.desc}` : "- Formato de produção: escolha o mais adequado",
+    `- Formato: ${inputs.formato}`,
+    inputs.duracao ? `- Duração alvo: ${inputs.duracao}` : null,
+    inputs.oferta ? `- Oferta/promoção vigente: ${inputs.oferta}` : null,
+    inputs.clientContext ? `\nContexto do cliente:\n${inputs.clientContext}` : null,
+    `\nNotas da biblioteca:\n${libraryContext(notes)}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const stream = anthropicClient().messages.stream({
+    model: MODEL,
+    max_tokens: inputs.nivel === "enxoval" ? 12000 : 6000,
+    thinking: { type: "adaptive" },
+    system: contentSystem(inputs),
+    messages: [{ role: "user", content: user }],
+  });
+  const outputMd = textOf(await stream.finalMessage());
+  return { outputMd, model: MODEL };
+}
+
 // ---- Engenheiro (chat livre de copy) --------------------------------------
 export async function askEngineer(question: string, notes: CopyNote[]): Promise<string> {
   const stream = anthropicClient().messages.stream({
@@ -218,7 +322,8 @@ export async function askEngineer(question: string, notes: CopyNote[]): Promise<
     max_tokens: 3000,
     thinking: { type: "adaptive" },
     system:
-      "Você é um engenheiro de copy e oferta (Hopkins, Ogilvy, Schwartz, Halbert, Hormozi). Responde pedidos de copy: headlines, ângulos, reescritas, estruturas de oferta. Só copy e oferta — não mexe em campanhas nem dados. Português do Brasil. Use as notas da biblioteca como base.",
+      "Você é um engenheiro de copy e oferta (Hopkins, Ogilvy, Schwartz, Halbert, Hormozi) e domina o MÉTODO ANDROMEDA de criativos para Meta Ads. Responde pedidos de copy: headlines, ângulos, reescritas, estruturas de oferta, roteiros de criativo. Só copy e oferta — não mexe em campanhas nem dados. Português do Brasil. Use as notas da biblioteca como base.\n\n" +
+      andromedaContext({ levels: ["C1", "C2", "C3"], includeAnatomy: true, includeRetention: true, includeEnxoval: true, includeMetricas: true }),
     messages: [
       {
         role: "user",

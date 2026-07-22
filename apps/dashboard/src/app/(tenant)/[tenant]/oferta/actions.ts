@@ -7,10 +7,12 @@ import {
   generateGso,
   regenerateGsoBlock,
   generateAdCopy,
+  generateContentCopy,
   askEngineer,
   loadLibrary,
   type GsoInputs,
   type AdCopyInputs,
+  type ContentCopyInputs,
 } from "@/server/offerV2";
 
 async function assertTenant(tenantId: string) {
@@ -108,6 +110,37 @@ export async function gerarAdCopy(formData: FormData): Promise<void> {
   await supabase.from("oferta").insert({
     tenant_id: tenantId,
     kind: "ad_copy",
+    inputs,
+    output_md: outputMd,
+    blocks: {},
+    model,
+  });
+  revalidatePath(`/${tenantId}/oferta`);
+}
+
+/** Copy de Conteúdo: gera roteiros de criativo (Método Andromeda) e salva. */
+export async function gerarCopyConteudo(formData: FormData): Promise<void> {
+  await requireUser();
+  const tenantId = String(formData.get("tenantId") ?? "");
+  const { supabase } = await assertTenant(tenantId);
+
+  const inputs: ContentCopyInputs = {
+    produto: String(formData.get("produto") ?? "").trim(),
+    publico: String(formData.get("publico") ?? "").trim(),
+    nivel: String(formData.get("nivel") ?? "enxoval"),
+    tipo: String(formData.get("tipo") ?? "auto"),
+    producao: String(formData.get("producao") ?? "auto"),
+    formato: String(formData.get("formato") ?? "Vídeo"),
+    duracao: String(formData.get("duracao") ?? "").trim() || undefined,
+    oferta: String(formData.get("oferta") ?? "").trim() || undefined,
+    clientContext: await clientContext(tenantId, formData.get("useContext") === "on"),
+  };
+  if (!inputs.produto || !inputs.publico) throw new Error("Preencha produto e público.");
+
+  const { outputMd, model } = await generateContentCopy(inputs, await notesFor(tenantId));
+  await supabase.from("oferta").insert({
+    tenant_id: tenantId,
+    kind: "content",
     inputs,
     output_md: outputMd,
     blocks: {},
